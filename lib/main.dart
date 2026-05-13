@@ -1,14 +1,28 @@
+import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:unitransit_admin/core/constants/app_colors.dart';
+import 'package:unitransit_admin/firebase_options.dart';
+import 'package:unitransit_admin/core/services/firebase_service.dart';
 import 'package:unitransit_admin/view_models/dashboard_view_model.dart';
-import 'package:unitransit_admin/views/dashboard_screen.dart';
+import 'package:unitransit_admin/views/login_screen.dart';
+import 'package:unitransit_admin/views/splash_screen.dart';
 
-void main() {
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   runApp(
     MultiProvider(
       providers: [
+        Provider(create: (_) => FirebaseService()),
         ChangeNotifierProvider(create: (_) => DashboardViewModel()),
       ],
       child: const AdminPanelApp(),
@@ -16,34 +30,106 @@ void main() {
   );
 }
 
+class MyCustomScrollBehavior extends MaterialScrollBehavior {
+  @override
+  Set<PointerDeviceKind> get dragDevices => {
+    PointerDeviceKind.touch,
+    PointerDeviceKind.mouse,
+    PointerDeviceKind.trackpad,
+  };
+}
+
 class AdminPanelApp extends StatelessWidget {
   const AdminPanelApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Uni-Transit Admin',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        primaryColor: AppColors.primaryNavy,
-        scaffoldBackgroundColor: const Color(0xFF0F172A),
-        textTheme: GoogleFonts.interTextTheme(
-          ThemeData.dark().textTheme,
-        ).apply(
-          bodyColor: Colors.white,
-          displayColor: Colors.white,
-        ),
-        cardTheme: CardTheme(
-          color: const Color(0xFF1E293B),
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+    return SessionTimeoutWrapper(
+      child: MaterialApp(
+        title: 'Uni-Transit Admin',
+        navigatorKey: navigatorKey,
+        debugShowCheckedModeBanner: false,
+        scrollBehavior: MyCustomScrollBehavior(),
+        theme: ThemeData(
+          brightness: Brightness.light,
+          primaryColor: AppColors.primaryNavy,
+          scaffoldBackgroundColor: AppColors.backgroundLight,
+          textTheme: GoogleFonts.interTextTheme(
+            ThemeData.light().textTheme,
+          ).apply(
+            bodyColor: AppColors.textDark,
+            displayColor: AppColors.textDark,
           ),
+          cardTheme: CardThemeData(
+            color: AppColors.cardWhite,
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: const BorderSide(color: AppColors.borderLight),
+            ),
+          ),
+          useMaterial3: true,
         ),
-        useMaterial3: true,
+        home: const SplashScreen(),
       ),
-      home: const DashboardScreen(),
+    );
+  }
+}
+
+class SessionTimeoutWrapper extends StatefulWidget {
+  final Widget child;
+  const SessionTimeoutWrapper({super.key, required this.child});
+
+  @override
+  State<SessionTimeoutWrapper> createState() => _SessionTimeoutWrapperState();
+}
+
+class _SessionTimeoutWrapperState extends State<SessionTimeoutWrapper> {
+  Timer? _timer;
+  static const _timeoutDuration = Duration(minutes: 30);
+
+  @override
+  void initState() {
+    super.initState();
+    _startTimer();
+  }
+
+  void _startTimer() {
+    _timer?.cancel();
+    _timer = Timer(_timeoutDuration, _handleTimeout);
+  }
+
+  void _handleTimeout() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      await FirebaseAuth.instance.signOut();
+      navigatorKey.currentState?.pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+        (route) => false,
+      );
+      // Show a snackbar or dialog if possible (optional)
+    }
+  }
+
+  void _handleUserInteraction([_]) {
+    _startTimer();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: _handleUserInteraction,
+      onPointerMove: _handleUserInteraction,
+      onPointerHover: _handleUserInteraction,
+      onPointerSignal: _handleUserInteraction,
+      child: widget.child,
     );
   }
 }

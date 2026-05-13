@@ -2,94 +2,136 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:provider/provider.dart';
 import 'package:unitransit_admin/core/constants/app_colors.dart';
+import 'package:unitransit_admin/core/utils/responsive_util.dart';
 import 'package:unitransit_admin/view_models/dashboard_view_model.dart';
 import 'package:unitransit_admin/widgets/sidebar.dart';
 import 'package:unitransit_admin/widgets/header.dart';
-import 'package:responsive_builder/responsive_builder.dart';
+import 'package:unitransit_admin/views/students_screen.dart';
+import 'package:unitransit_admin/views/drivers_screen.dart';
+import 'package:unitransit_admin/views/notifications_screen.dart';
+import 'package:unitransit_admin/views/support_screen.dart';
+import 'package:unitransit_admin/views/settings_screen.dart';
+import 'package:unitransit_admin/views/fleet_operations_screen.dart';
+import 'package:unitransit_admin/views/route_planning_screen.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final viewModel = context.watch<DashboardViewModel>();
+
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      body: ResponsiveBuilder(
-        builder: (context, sizingInformation) {
-          return Row(
-            children: [
-              if (sizingInformation.isDesktop)
-                const Sidebar(),
-              Expanded(
-                child: Column(
-                  children: [
-                    const Header(),
-                    Expanded(
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.all(32),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Dashboard Overview',
-                                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.white,
-                                        letterSpacing: -0.5,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'Welcome back, here\'s what\'s happening today.',
-                                      style: TextStyle(
-                                        color: Colors.white.withValues(alpha: 0.5),
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                ElevatedButton.icon(
-                                  onPressed: () => context.read<DashboardViewModel>().refreshData(),
-                                  icon: const Icon(Icons.refresh, size: 18),
-                                  label: const Text('Refresh Data'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: AppColors.primaryNavy,
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 32),
-                            // Stats Grid
-                            const DashboardStatsGrid(),
-                            const SizedBox(height: 32),
-                            // Charts and Recent Activity
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Expanded(flex: 2, child: DashboardChart()),
-                                const SizedBox(width: 32),
-                                Expanded(flex: 1, child: RecentActivity()),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
+      backgroundColor: AppColors.backgroundLight,
+      drawer: !AppResponsiveUtil.isDesktop(context) ? const Drawer(width: 280, child: Sidebar()) : null,
+      body: Row(
+        children: [
+          if (AppResponsiveUtil.isDesktop(context)) const Sidebar(),
+          Expanded(
+            child: Column(
+              children: [
+                const Header(),
+                Expanded(
+                  child: IndexedStack(
+                      index: viewModel.selectedIndex,
+                      children: [
+                        const DashboardOverview(),
+                        const StudentsScreen(),
+                        const DriversScreen(),
+                        const FleetOperationsScreen(),
+                        const RoutePlanningScreen(),
+                        const Center(child: Text('Performance Reports - Coming Soon')),
+                        const Center(child: Text('Trip History - Coming Soon')),
+                        const NotificationsScreen(),
+                        const SupportScreen(),
+                        const SettingsScreen(),
+                      ],
                     ),
-                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class DashboardOverview extends StatelessWidget {
+  const DashboardOverview({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      controller: ScrollController(),
+      padding: EdgeInsets.all(AppResponsiveUtil.isMobile(context) ? 16 : 32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 16,
+            runSpacing: 16,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Dashboard Overview',
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textDark,
+                          letterSpacing: -0.5,
+                          fontSize: AppResponsiveUtil.isMobile(context) ? 24 : null,
+                        ),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Welcome back, here\'s what\'s happening today.',
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+              ElevatedButton.icon(
+                onPressed: () => context.read<DashboardViewModel>().refreshData(),
+                icon: const Icon(Icons.refresh, size: 16),
+                label: const Text('Refresh Data'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryNavy,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
               ),
             ],
-          );
-        },
+          ),
+          const SizedBox(height: 32),
+          // Stats Grid
+          const DashboardStatsGrid(),
+          const SizedBox(height: 32),
+          // Charts and Recent Activity
+          if (AppResponsiveUtil.isDesktop(context))
+            const Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(flex: 2, child: DashboardChart()),
+                SizedBox(width: 32),
+                Expanded(flex: 1, child: RecentActivity()),
+              ],
+            )
+          else
+            const Column(
+              children: [
+                DashboardChart(),
+                SizedBox(height: 32),
+                RecentActivity(),
+              ],
+            ),
+        ],
       ),
     );
   }
@@ -107,24 +149,24 @@ class DashboardStatsGrid extends StatelessWidget {
         return GridView.count(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          crossAxisCount: constraints.maxWidth > 1200 ? 4 : 2,
+          crossAxisCount: constraints.maxWidth > 1400 ? 4 : (constraints.maxWidth > 700 ? 2 : 1),
           crossAxisSpacing: 24,
           mainAxisSpacing: 24,
-          childAspectRatio: 2.2,
+          childAspectRatio: constraints.maxWidth > 1400 ? 2.2 : 2.5,
           children: [
             StatCard(
-              title: 'Total Users',
-              value: viewModel.totalUsers.toString(),
+              title: 'Total Students',
+              value: viewModel.totalStudents.toString(),
               icon: Icons.people_outline_rounded,
               color: AppColors.primaryNavy,
-              trend: '+12%',
+              trend: '+${viewModel.totalStudents > 0 ? "100" : "0"}%',
             ),
             StatCard(
-              title: 'Active Trips',
-              value: viewModel.activeTrips.toString(),
-              icon: Icons.directions_bus_rounded,
-              color: AppColors.primaryYellow,
-              trend: '+5%',
+              title: 'Total Drivers',
+              value: viewModel.totalDrivers.toString(),
+              icon: Icons.drive_eta_rounded,
+              color: AppColors.accentAmber,
+              trend: '+${viewModel.totalDrivers > 0 ? "100" : "0"}%',
             ),
             StatCard(
               title: 'Total Revenue',
@@ -168,12 +210,12 @@ class StatCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
+        color: AppColors.cardWhite,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+        border: Border.all(color: AppColors.borderLight),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.1),
+            color: Colors.black.withValues(alpha: 0.02),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -197,8 +239,8 @@ class StatCard extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.5),
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
                   ),
@@ -210,7 +252,7 @@ class StatCard extends StatelessWidget {
                     Text(
                       value,
                       style: const TextStyle(
-                        color: Colors.white,
+                        color: AppColors.textDark,
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
                       ),
@@ -250,9 +292,9 @@ class DashboardChart extends StatelessWidget {
       height: 450,
       padding: const EdgeInsets.all(32),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
+        color: AppColors.cardWhite,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+        border: Border.all(color: AppColors.borderLight),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -265,20 +307,20 @@ class DashboardChart extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
-                  color: Colors.white,
+                  color: AppColors.textDark,
                 ),
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF0F172A),
+                  color: AppColors.backgroundLight,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: DropdownButton<String>(
                   value: 'Weekly',
                   underline: const SizedBox(),
-                  dropdownColor: const Color(0xFF0F172A),
-                  icon: const Icon(Icons.keyboard_arrow_down, color: Colors.white54, size: 20),
+                  dropdownColor: AppColors.cardWhite,
+                  icon: const Icon(Icons.keyboard_arrow_down, color: AppColors.textSecondary, size: 20),
                   items: ['Daily', 'Weekly', 'Monthly'].map((String value) {
                     return DropdownMenuItem<String>(
                       value: value,
@@ -298,8 +340,8 @@ class DashboardChart extends StatelessWidget {
                   show: true,
                   drawVerticalLine: false,
                   getDrawingHorizontalLine: (value) {
-                    return FlLine(
-                      color: Colors.white.withValues(alpha: 0.05),
+                    return const FlLine(
+                      color: AppColors.borderLight,
                       strokeWidth: 1,
                     );
                   },
@@ -316,7 +358,7 @@ class DashboardChart extends StatelessWidget {
                         if (value.toInt() >= 0 && value.toInt() < days.length) {
                           return Padding(
                             padding: const EdgeInsets.only(top: 12.0),
-                            child: Text(days[value.toInt()], style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 12)),
+                            child: Text(days[value.toInt()], style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
                           );
                         }
                         return const SizedBox();
@@ -327,7 +369,7 @@ class DashboardChart extends StatelessWidget {
                     sideTitles: SideTitles(
                       showTitles: true,
                       getTitlesWidget: (value, meta) {
-                        return Text('${value.toInt()}', style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 12));
+                        return Text('${value.toInt()}', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12));
                       },
                       reservedSize: 35,
                     ),
@@ -346,16 +388,16 @@ class DashboardChart extends StatelessWidget {
                       FlSpot(6, 70),
                     ],
                     isCurved: true,
-                    color: AppColors.primaryYellow,
+                    color: AppColors.accentAmber,
                     barWidth: 4,
                     isStrokeCapRound: true,
                     dotData: FlDotData(
                       show: true,
                       getDotPainter: (spot, percent, barData, index) => FlDotCirclePainter(
                         radius: 4,
-                        color: AppColors.primaryYellow,
+                        color: AppColors.accentAmber,
                         strokeWidth: 2,
-                        strokeColor: const Color(0xFF1E293B),
+                        strokeColor: AppColors.cardWhite,
                       ),
                     ),
                     belowBarData: BarAreaData(
@@ -364,8 +406,8 @@ class DashboardChart extends StatelessWidget {
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
                         colors: [
-                          AppColors.primaryYellow.withValues(alpha: 0.2),
-                          AppColors.primaryYellow.withValues(alpha: 0.0),
+                          AppColors.accentAmber.withValues(alpha: 0.2),
+                          AppColors.accentAmber.withValues(alpha: 0.0),
                         ],
                       ),
                     ),
@@ -373,12 +415,12 @@ class DashboardChart extends StatelessWidget {
                 ],
                 lineTouchData: LineTouchData(
                   touchTooltipData: LineTouchTooltipData(
-                    getTooltipColor: (spot) => const Color(0xFF0F172A),
+                    getTooltipColor: (spot) => AppColors.textDark,
                     getTooltipItems: (List<LineBarSpot> touchedBarSpots) {
                       return touchedBarSpots.map((barSpot) {
                         return LineTooltipItem(
                           '${barSpot.y.toInt()} Trips',
-                          const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                          const TextStyle(color: AppColors.cardWhite, fontWeight: FontWeight.bold),
                         );
                       }).toList();
                     },
@@ -402,9 +444,9 @@ class RecentActivity extends StatelessWidget {
       height: 450,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
+        color: AppColors.cardWhite,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+        border: Border.all(color: AppColors.borderLight),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -414,7 +456,7 @@ class RecentActivity extends StatelessWidget {
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
-              color: Colors.white,
+              color: AppColors.textDark,
             ),
           ),
           const SizedBox(height: 24),
@@ -450,12 +492,11 @@ class RecentActivity extends StatelessWidget {
                         children: [
                           Text(
                             activity['title'] as String,
-                            style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+                            style: const TextStyle(color: AppColors.textDark, fontSize: 14, fontWeight: FontWeight.w600),
                           ),
-                          const SizedBox(height: 2),
                           Text(
                             activity['time'] as String,
-                            style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 12),
+                            style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
                           ),
                         ],
                       ),
@@ -471,9 +512,9 @@ class RecentActivity extends StatelessWidget {
             child: const Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text('View All Activity', style: TextStyle(color: AppColors.primaryYellow)),
+                Text('View All Activity', style: TextStyle(color: AppColors.accentAmber)),
                 SizedBox(width: 8),
-                Icon(Icons.arrow_forward_rounded, size: 16, color: AppColors.primaryYellow),
+                Icon(Icons.arrow_forward_rounded, size: 16, color: AppColors.accentAmber),
               ],
             ),
           ),

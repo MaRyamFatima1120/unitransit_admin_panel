@@ -1,26 +1,49 @@
 import 'package:flutter/material.dart';
+import 'package:unitransit_admin/core/services/firebase_service.dart';
 
 class DashboardViewModel extends ChangeNotifier {
+  final FirebaseService _firebaseService = FirebaseService();
   bool _isLoading = false;
+  int _selectedIndex = 0;
+  String _searchQuery = '';
+
   bool get isLoading => _isLoading;
+  int get selectedIndex => _selectedIndex;
+  String get searchQuery => _searchQuery;
 
-  // Mock data for dashboard
-  int totalUsers = 1284;
+  void setSelectedIndex(int index) {
+    _selectedIndex = index;
+    notifyListeners();
+  }
+
+  void updateSearchQuery(String query) {
+    _searchQuery = query;
+    notifyListeners();
+  }
+
+  // Real data stats
+  int totalStudents = 0;
+  int totalDrivers = 0;
   int activeTrips = 42;
-  double totalRevenue = 12450.0;
   int pendingAlerts = 12;
+  double totalRevenue = 12450.0; // Placeholder for now
 
-  void refreshData() async {
+  DashboardViewModel() {
+    refreshData();
+  }
+
+  Future<void> refreshData() async {
     _isLoading = true;
     notifyListeners();
 
-    // Simulate network delay
-    await Future.delayed(const Duration(seconds: 1));
+    try {
+      final stats = await _firebaseService.getStats();
+      totalDrivers = stats['totalDrivers'] ?? 0;
+      totalStudents = stats['totalStudents'] ?? 0;
+    } catch (e) {
+      debugPrint('Error fetching stats: $e');
+    }
 
-    // Update with random values for demonstration
-    totalUsers += 5;
-    activeTrips = 40 + (DateTime.now().second % 10);
-    
     _isLoading = false;
     notifyListeners();
   }
