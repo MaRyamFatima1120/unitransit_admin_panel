@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:provider/provider.dart';
 import 'package:unitransit_admin/core/constants/app_colors.dart';
+import 'package:unitransit_admin/view_models/dashboard_view_model.dart';
+import 'package:unitransit_admin/views/login_screen.dart';
 
 class Sidebar extends StatelessWidget {
   const Sidebar({super.key});
@@ -9,9 +13,9 @@ class Sidebar extends StatelessWidget {
     return Container(
       width: 280,
       height: double.infinity,
-      decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
-        border: Border(right: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
+      decoration: const BoxDecoration(
+        color: AppColors.cardWhite,
+        border: Border(right: BorderSide(color: AppColors.borderLight)),
       ),
       child: Column(
         children: [
@@ -49,7 +53,7 @@ class Sidebar extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.w900,
-                        color: Colors.white,
+                        color: AppColors.textDark,
                         letterSpacing: -0.5,
                       ),
                     ),
@@ -57,7 +61,7 @@ class Sidebar extends StatelessWidget {
                       'Admin Panel',
                       style: TextStyle(
                         fontSize: 12,
-                        color: Colors.white54,
+                        color: AppColors.textSecondary,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -70,49 +74,76 @@ class Sidebar extends StatelessWidget {
           // Navigation Items
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
               children: [
-                _buildSectionTitle('MAIN MENU'),
-                _buildMenuItem(Icons.dashboard_rounded, 'Dashboard', isActive: true),
-                _buildMenuItem(Icons.people_alt_rounded, 'Users Management'),
-                _buildMenuItem(Icons.directions_bus_rounded, 'Fleet Operations'),
-                _buildMenuItem(Icons.map_rounded, 'Route Planning'),
-                const SizedBox(height: 24),
-                _buildSectionTitle('ANALYTICS'),
-                _buildMenuItem(Icons.bar_chart_rounded, 'Performance Reports'),
-                _buildMenuItem(Icons.history_rounded, 'Trip History'),
-                _buildMenuItem(Icons.notifications_active_rounded, 'System Alerts'),
-                const SizedBox(height: 24),
-                _buildSectionTitle('SYSTEM'),
-                _buildMenuItem(Icons.settings_rounded, 'Global Settings'),
-                _buildMenuItem(Icons.admin_panel_settings_rounded, 'Admin Roles'),
+                _buildMenuItem(context, 0, Icons.dashboard_rounded, 'Dashboard'),
+                _buildMenuItem(context, 1, Icons.people_alt_rounded, 'Students'),
+                _buildMenuItem(context, 2, Icons.drive_eta_rounded, 'Drivers'),
+                _buildMenuItem(context, 3, Icons.directions_bus_rounded, 'Fleet Operations'),
+                _buildMenuItem(context, 4, Icons.map_rounded, 'Route Planning'),
+                _buildMenuItem(context, 5, Icons.bar_chart_rounded, 'Performance Reports'),
+                _buildMenuItem(context, 6, Icons.history_rounded, 'Trip History'),
+                _buildMenuItem(context, 7, Icons.notifications_active_rounded, 'Notifications'),
+                _buildMenuItem(context, 8, Icons.support_agent_rounded, 'Support Center'),
+                _buildMenuItem(context, 9, Icons.settings_rounded, 'Settings'),
               ],
             ),
           ),
           // Footer / Logout
           Padding(
             padding: const EdgeInsets.all(24),
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: const Color(0xFF0F172A),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.logout_rounded, color: Colors.redAccent, size: 20),
-                  const SizedBox(width: 12),
-                  const Text(
-                    'Logout Session',
-                    style: TextStyle(
-                      color: Colors.redAccent,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
+            child: InkWell(
+              onTap: () {
+                showDialog(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('Logout'),
+                    content: const Text('Are you sure you want to logout?'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Cancel'),
+                      ),
+                      TextButton(
+                        onPressed: () async {
+                          Navigator.pop(context); // Close dialog
+                          await FirebaseAuth.instance.signOut();
+                          if (context.mounted) {
+                            Navigator.of(context).pushAndRemoveUntil(
+                              MaterialPageRoute(builder: (context) => const LoginScreen()),
+                              (route) => false,
+                            );
+                          }
+                        },
+                        child: const Text('Logout', style: TextStyle(color: Colors.redAccent)),
+                      ),
+                    ],
                   ),
-                  const Spacer(),
-                  Icon(Icons.arrow_forward_ios_rounded, color: Colors.redAccent.withValues(alpha: 0.3), size: 12),
-                ],
+                );
+              },
+              borderRadius: BorderRadius.circular(16),
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.backgroundLight,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.logout_rounded, color: Colors.redAccent, size: 20),
+                    const SizedBox(width: 12),
+                    const Text(
+                      'Logout',
+                      style: TextStyle(
+                        color: Colors.redAccent,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const Spacer(),
+                    Icon(Icons.arrow_forward_ios_rounded, color: Colors.redAccent.withValues(alpha: 0.3), size: 12),
+                  ],
+                ),
               ),
             ),
           ),
@@ -121,22 +152,12 @@ class Sidebar extends StatelessWidget {
     );
   }
 
-  Widget _buildSectionTitle(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 16, bottom: 12, top: 8),
-      child: Text(
-        title,
-        style: TextStyle(
-          color: Colors.white.withValues(alpha: 0.3),
-          fontSize: 11,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 1.2,
-        ),
-      ),
-    );
-  }
 
-  Widget _buildMenuItem(IconData icon, String title, {bool isActive = false}) {
+
+  Widget _buildMenuItem(BuildContext context, int index, IconData icon, String title) {
+    final viewModel = context.watch<DashboardViewModel>();
+    final isActive = viewModel.selectedIndex == index;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
@@ -145,17 +166,23 @@ class Sidebar extends StatelessWidget {
         border: isActive ? Border.all(color: AppColors.primaryNavy.withValues(alpha: 0.3)) : null,
       ),
       child: ListTile(
-        onTap: () {},
+        onTap: () {
+          viewModel.setSelectedIndex(index);
+          // Auto-close drawer on mobile
+          if (Scaffold.of(context).isDrawerOpen) {
+            Navigator.pop(context);
+          }
+        },
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         leading: Icon(
           icon,
-          color: isActive ? AppColors.primaryYellow : Colors.white54,
+          color: isActive ? AppColors.accentAmber : AppColors.textSecondary,
           size: 22,
         ),
         title: Text(
           title,
           style: TextStyle(
-            color: isActive ? Colors.white : Colors.white54,
+            color: isActive ? AppColors.textDark : AppColors.textSecondary,
             fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
             fontSize: 14,
           ),
@@ -164,7 +191,7 @@ class Sidebar extends StatelessWidget {
           width: 6,
           height: 6,
           decoration: const BoxDecoration(
-            color: AppColors.primaryYellow,
+            color: AppColors.accentAmber,
             shape: BoxShape.circle,
           ),
         ) : null,

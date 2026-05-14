@@ -16,7 +16,7 @@ class AppTheme {
         seedColor: AppColors.primaryNavy,
         brightness: Brightness.light,
         primary: AppColors.primaryNavy,
-        secondary: AppColors.primaryYellow,
+        secondary: AppColors.accentAmber,
         surface: Colors.white,
         error: const Color(0xFFB00020),
       ),
@@ -37,7 +37,7 @@ class AppTheme {
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.primaryYellow,
+          backgroundColor: AppColors.accentAmber,
           foregroundColor: Colors.white,
           minimumSize: const Size(double.infinity, 50),
           shape: RoundedRectangleBorder(
@@ -63,7 +63,7 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.primaryYellow, width: 2),
+          borderSide: const BorderSide(color: AppColors.accentAmber, width: 2),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
@@ -91,7 +91,7 @@ class AppTheme {
         seedColor: AppColors.primaryNavy,
         brightness: Brightness.dark,
         primary: AppColors.primaryNavy,
-        secondary: AppColors.primaryYellow,
+        secondary: AppColors.accentAmber,
         surface: const Color(0xFF1E293B),
         onSurface: Colors.white,
       ),
@@ -112,7 +112,7 @@ class AppTheme {
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.primaryYellow,
+          backgroundColor: AppColors.accentAmber,
           foregroundColor: Colors.white,
           minimumSize: const Size(double.infinity, 50),
           shape: RoundedRectangleBorder(
@@ -138,7 +138,7 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.primaryYellow, width: 2),
+          borderSide: const BorderSide(color: AppColors.accentAmber, width: 2),
         ),
         labelStyle: TextStyle(color: Colors.grey.shade400),
       ),
