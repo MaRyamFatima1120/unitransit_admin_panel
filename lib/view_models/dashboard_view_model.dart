@@ -6,10 +6,12 @@ class DashboardViewModel extends ChangeNotifier {
   bool _isLoading = false;
   int _selectedIndex = 0;
   String _searchQuery = '';
+  String _selectedGender = 'All';
 
   bool get isLoading => _isLoading;
   int get selectedIndex => _selectedIndex;
   String get searchQuery => _searchQuery;
+  String get selectedGender => _selectedGender;
 
   void setSelectedIndex(int index) {
     _selectedIndex = index;
@@ -18,6 +20,11 @@ class DashboardViewModel extends ChangeNotifier {
 
   void updateSearchQuery(String query) {
     _searchQuery = query;
+    notifyListeners();
+  }
+
+  void setSelectedGender(String gender) {
+    _selectedGender = gender;
     notifyListeners();
   }
 

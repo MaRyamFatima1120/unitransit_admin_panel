@@ -349,6 +349,31 @@ class RouteDefinitionSection extends StatelessWidget {
                         items: hubs.map((h) => DropdownMenuItem<String>(value: h.name, child: Text(h.name))).toList(),
                         onChanged: (v) => viewModel.setToHub(v),
                       ),
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<String>(
+                        value: viewModel.selectedGender,
+                        decoration: InputDecoration(
+                          labelText: 'Service Type (Gender)',
+                          prefixIcon: Icon(
+                            viewModel.selectedGender == 'Girls' 
+                                ? Icons.female_rounded 
+                                : viewModel.selectedGender == 'Boys' 
+                                    ? Icons.male_rounded 
+                                    : Icons.people_rounded, 
+                            color: viewModel.selectedGender == 'Girls' 
+                                ? Colors.pinkAccent 
+                                : viewModel.selectedGender == 'Boys' 
+                                    ? Colors.blueAccent 
+                                    : AppColors.primaryNavy,
+                          ),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        items: ['Combined', 'Girls', 'Boys'].map((g) => DropdownMenuItem<String>(
+                          value: g, 
+                          child: Text(g)
+                        )).toList(),
+                        onChanged: (v) => viewModel.setSelectedGender(v),
+                      ),
                       const SizedBox(height: 24),
                       Row(
                         children: [
@@ -429,9 +454,44 @@ class RouteDefinitionSection extends StatelessWidget {
                               final data = docs[index].data() as Map<String, dynamic>;
                               final route = BusSchedule.fromMap(docs[index].id, data);
                               return ListTile(
-                                leading: const Icon(Icons.alt_route, color: AppColors.primaryNavy),
+                                leading: CircleAvatar(
+                                  backgroundColor: route.type == 'Girls' 
+                                      ? Colors.pinkAccent.withOpacity(0.1) 
+                                      : route.type == 'Boys' 
+                                          ? Colors.blueAccent.withOpacity(0.1) 
+                                          : AppColors.primaryNavy.withOpacity(0.1),
+                                  child: Icon(
+                                    route.type == 'Girls' 
+                                        ? Icons.female_rounded 
+                                        : route.type == 'Boys' 
+                                            ? Icons.male_rounded 
+                                            : Icons.people_rounded,
+                                    color: route.type == 'Girls' 
+                                        ? Colors.pinkAccent 
+                                        : route.type == 'Boys' 
+                                            ? Colors.blueAccent 
+                                            : AppColors.primaryNavy,
+                                    size: 20,
+                                  ),
+                                ),
                                 title: Text(route.route, style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
-                                subtitle: Text('${route.from} ➔ ${route.to}'),
+                                subtitle: Row(
+                                  children: [
+                                    Text('${route.from} ➔ ${route.to}', style: const TextStyle(fontSize: 12)),
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey[200],
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        route.type.toUpperCase(),
+                                        style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.grey[600]),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                                 trailing: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
