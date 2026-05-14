@@ -70,12 +70,14 @@ class RoutePlanningViewModel extends ChangeNotifier {
   final routeNameController = TextEditingController();
   String? _fromHub;
   String? _toHub;
+  String _selectedGender = 'Combined';
   bool _isRouteSaving = false;
   String? _editingRouteId;
   String? _originalRouteName;
 
   String? get fromHub => _fromHub;
   String? get toHub => _toHub;
+  String get selectedGender => _selectedGender;
   bool get isRouteSaving => _isRouteSaving;
   String? get editingRouteId => _editingRouteId;
 
@@ -89,6 +91,13 @@ class RoutePlanningViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setSelectedGender(String? gender) {
+    if (gender != null) {
+      _selectedGender = gender;
+      notifyListeners();
+    }
+  }
+
   void setEditingRoute(BusSchedule? route) {
     if (route != null) {
       _editingRouteId = route.id;
@@ -96,12 +105,14 @@ class RoutePlanningViewModel extends ChangeNotifier {
       routeNameController.text = route.route;
       _fromHub = route.from;
       _toHub = route.to;
+      _selectedGender = route.type;
     } else {
       _editingRouteId = null;
       _originalRouteName = null;
       routeNameController.clear();
       _fromHub = null;
       _toHub = null;
+      _selectedGender = 'Combined';
     }
     notifyListeners();
   }
@@ -118,7 +129,7 @@ class RoutePlanningViewModel extends ChangeNotifier {
           from: _fromHub!,
           to: _toHub!,
           stops: [_fromHub!, _toHub!],
-          type: 'Combined',
+          type: _selectedGender,
         );
 
         if (_editingRouteId != null) {
