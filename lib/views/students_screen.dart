@@ -3,14 +3,14 @@ import 'package:provider/provider.dart';
 import 'package:unitransit_admin/core/constants/app_colors.dart';
 import 'package:unitransit_admin/core/services/firebase_service.dart';
 import 'package:unitransit_admin/models/student_model.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:unitransit_admin/core/utils/responsive_util.dart';
 import 'package:unitransit_admin/view_models/dashboard_view_model.dart';
+import 'package:unitransit_admin/view_models/students_view_model.dart';
 
 class StudentsScreen extends StatelessWidget {
   const StudentsScreen({super.key});
 
-  void _showAddStudentDialog(BuildContext context) {
+  void _showAddStudentDialog(BuildContext context, StudentsViewModel viewModel) {
     final formKey = GlobalKey<FormState>();
     final nameController = TextEditingController();
     final studentIdController = TextEditingController();
@@ -41,30 +41,28 @@ class StudentsScreen extends StatelessWidget {
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryNavy, foregroundColor: Colors.white),
-            onPressed: () async {
-              if (formKey.currentState!.validate()) {
-                final firebaseService = Provider.of<FirebaseService>(context, listen: false);
-                final id = FirebaseFirestore.instance.collection('students').doc().id;
-                
-                final newStudent = StudentModel(
-                  id: id,
-                  name: nameController.text,
-                  studentId: studentIdController.text,
-                  department: deptController.text,
-                  phoneNumber: phoneController.text,
-                  route: routeController.text,
-                  stop: stopController.text,
-                  status: 'Active',
-                  createdAt: DateTime.now(),
-                );
-
-                await firebaseService.addStudent(newStudent);
-                if (context.mounted) Navigator.pop(context);
-              }
+          ValueListenableBuilder(
+            valueListenable: ValueNotifier(viewModel.isSaving),
+            builder: (context, _, __) {
+              final isSaving = context.select<StudentsViewModel, bool>((v) => v.isSaving);
+              return ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryNavy, foregroundColor: Colors.white),
+                onPressed: isSaving ? null : () async {
+                  if (formKey.currentState!.validate()) {
+                    await viewModel.addStudent(
+                      name: nameController.text,
+                      studentId: studentIdController.text,
+                      department: deptController.text,
+                      phone: phoneController.text,
+                      route: routeController.text,
+                      stop: stopController.text,
+                    );
+                    if (context.mounted) Navigator.pop(context);
+                  }
+                },
+                child: isSaving ? const CircularProgressIndicator() : const Text('Add Student'),
+              );
             },
-            child: const Text('Add Student'),
           ),
         ],
       ),
@@ -90,7 +88,9 @@ class StudentsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final firebaseService = Provider.of<FirebaseService>(context);
+    final viewModel = context.watch<StudentsViewModel>();
+    final dashboardViewModel = context.watch<DashboardViewModel>();
+    final firebaseService = context.read<FirebaseService>();
 
     return Padding(
       padding: EdgeInsets.all(AppResponsiveUtil.isMobile(context) ? 16 : 32),
@@ -119,7 +119,7 @@ class StudentsScreen extends StatelessWidget {
                 ],
               ),
               ElevatedButton.icon(
-                onPressed: () => _showAddStudentDialog(context),
+                onPressed: () => _showAddStudentDialog(context, viewModel),
                 icon: const Icon(Icons.add, size: 18),
                 label: const Text('Add Student'),
                 style: ElevatedButton.styleFrom(
@@ -150,7 +150,7 @@ class StudentsScreen extends StatelessWidget {
                   }
 
                   final students = snapshot.data!;
-                  final searchQuery = context.watch<DashboardViewModel>().searchQuery;
+                  final searchQuery = dashboardViewModel.searchQuery;
                   
                   final filteredStudents = students.where((s) {
                     if (searchQuery.isEmpty) return true;
@@ -178,7 +178,7 @@ class StudentsScreen extends StatelessWidget {
                           return ListTile(
                             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                             leading: CircleAvatar(
-                              backgroundColor: AppColors.primaryNavy.withValues(alpha: 0.1),
+                              backgroundColor: AppColors.primaryNavy.withOpacity(0.1),
                               child: Text(
                                 student.name.isNotEmpty ? student.name[0].toUpperCase() : '?',
                                 style: const TextStyle(color: AppColors.primaryNavy, fontWeight: FontWeight.bold),
@@ -193,7 +193,7 @@ class StudentsScreen extends StatelessWidget {
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                     decoration: BoxDecoration(
-                                      color: Colors.green.withValues(alpha: 0.1),
+                                      color: Colors.green.withOpacity(0.1),
                                       borderRadius: BorderRadius.circular(6),
                                     ),
                                     child: Text(
@@ -203,7 +203,7 @@ class StudentsScreen extends StatelessWidget {
                                   ),
                                 IconButton(
                                   icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 20),
-                                  onPressed: () => firebaseService.deleteStudent(student.id),
+                                  onPressed: () => viewModel.deleteStudent(student.id),
                                 ),
                               ],
                             ),

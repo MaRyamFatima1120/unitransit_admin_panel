@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:unitransit_admin/core/constants/app_colors.dart';
 import 'package:unitransit_admin/views/login_screen.dart';
+import 'package:unitransit_admin/views/dashboard_screen.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -38,9 +40,13 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   void _navigateToNext() async {
     await Future.delayed(const Duration(seconds: 4));
     if (mounted) {
+      final user = FirebaseAuth.instance.currentUser;
+      
+      Widget nextScreen = user != null ? const DashboardScreen() : const LoginScreen();
+
       Navigator.of(context).pushReplacement(
         PageRouteBuilder(
-          pageBuilder: (context, animation, secondaryAnimation) => const LoginScreen(),
+          pageBuilder: (context, animation, secondaryAnimation) => nextScreen,
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
             return FadeTransition(opacity: animation, child: child);
           },

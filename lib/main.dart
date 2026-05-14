@@ -9,6 +9,9 @@ import 'package:unitransit_admin/core/constants/app_colors.dart';
 import 'package:unitransit_admin/firebase_options.dart';
 import 'package:unitransit_admin/core/services/firebase_service.dart';
 import 'package:unitransit_admin/view_models/dashboard_view_model.dart';
+import 'package:unitransit_admin/view_models/route_planning_view_model.dart';
+import 'package:unitransit_admin/view_models/drivers_view_model.dart';
+import 'package:unitransit_admin/view_models/students_view_model.dart';
 import 'package:unitransit_admin/views/login_screen.dart';
 import 'package:unitransit_admin/views/splash_screen.dart';
 
@@ -24,6 +27,21 @@ void main() async {
       providers: [
         Provider(create: (_) => FirebaseService()),
         ChangeNotifierProvider(create: (_) => DashboardViewModel()),
+        ChangeNotifierProvider(
+          create: (context) => RoutePlanningViewModel(
+            Provider.of<FirebaseService>(context, listen: false),
+          ),
+        ),
+        ChangeNotifierProvider(
+          create: (context) => DriversViewModel(
+            Provider.of<FirebaseService>(context, listen: false),
+          ),
+        ),
+        ChangeNotifierProvider(
+          create: (context) => StudentsViewModel(
+            Provider.of<FirebaseService>(context, listen: false),
+          ),
+        ),
       ],
       child: const AdminPanelApp(),
     ),

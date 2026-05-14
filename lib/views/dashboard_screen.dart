@@ -19,40 +19,87 @@ class DashboardScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final viewModel = context.watch<DashboardViewModel>();
-
-    return Scaffold(
-      backgroundColor: AppColors.backgroundLight,
-      drawer: !AppResponsiveUtil.isDesktop(context) ? const Drawer(width: 280, child: Sidebar()) : null,
-      body: Row(
-        children: [
-          if (AppResponsiveUtil.isDesktop(context)) const Sidebar(),
-          Expanded(
-            child: Column(
-              children: [
-                const Header(),
-                Expanded(
-                  child: IndexedStack(
-                      index: viewModel.selectedIndex,
-                      children: [
-                        const DashboardOverview(),
-                        const StudentsScreen(),
-                        const DriversScreen(),
-                        const FleetOperationsScreen(),
-                        const RoutePlanningScreen(),
-                        const Center(child: Text('Performance Reports - Coming Soon')),
-                        const Center(child: Text('Trip History - Coming Soon')),
-                        const NotificationsScreen(),
-                        const SupportScreen(),
-                        const SettingsScreen(),
-                      ],
+    // Optimization: Using Selector to only rebuild when selectedIndex changes
+    return Selector<DashboardViewModel, int>(
+      selector: (_, vm) => vm.selectedIndex,
+      builder: (context, selectedIndex, _) {
+        return Scaffold(
+          backgroundColor: AppColors.backgroundLight,
+          drawer: !AppResponsiveUtil.isDesktop(context) ? const Drawer(width: 280, child: Sidebar()) : null,
+          body: Row(
+            children: [
+              if (AppResponsiveUtil.isDesktop(context)) const Sidebar(),
+              Expanded(
+                child: Column(
+                  children: [
+                    const Header(),
+                    Expanded(
+                      child: LazyIndexedStack(
+                        index: selectedIndex,
+                        children: const [
+                          DashboardOverview(),
+                          StudentsScreen(),
+                          DriversScreen(),
+                          FleetOperationsScreen(),
+                          RoutePlanningScreen(),
+                          Center(child: Text('Performance Reports - Coming Soon')),
+                          Center(child: Text('Trip History - Coming Soon')),
+                          NotificationsScreen(),
+                          SupportScreen(),
+                          SettingsScreen(),
+                        ],
+                      ),
                     ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
+    );
+  }
+}
+
+// Optimization: LazyIndexedStack only builds children when they are first shown
+class LazyIndexedStack extends StatefulWidget {
+  final int index;
+  final List<Widget> children;
+
+  const LazyIndexedStack({
+    super.key,
+    required this.index,
+    required this.children,
+  });
+
+  @override
+  State<LazyIndexedStack> createState() => _LazyIndexedStackState();
+}
+
+class _LazyIndexedStackState extends State<LazyIndexedStack> {
+  late List<bool> _activated;
+
+  @override
+  void initState() {
+    super.initState();
+    _activated = List.generate(widget.children.length, (i) => i == widget.index);
+  }
+
+  @override
+  void didUpdateWidget(LazyIndexedStack oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_activated[widget.index]) {
+      _activated[widget.index] = true;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return IndexedStack(
+      index: widget.index,
+      children: List.generate(widget.children.length, (i) {
+        return _activated[i] ? widget.children[i] : const SizedBox.shrink();
+      }),
     );
   }
 }
@@ -110,10 +157,8 @@ class DashboardOverview extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 32),
-          // Stats Grid
           const DashboardStatsGrid(),
           const SizedBox(height: 32),
-          // Charts and Recent Activity
           if (AppResponsiveUtil.isDesktop(context))
             const Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -142,47 +187,56 @@ class DashboardStatsGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final viewModel = context.watch<DashboardViewModel>();
-    
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return GridView.count(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisCount: constraints.maxWidth > 1400 ? 4 : (constraints.maxWidth > 700 ? 2 : 1),
-          crossAxisSpacing: 24,
-          mainAxisSpacing: 24,
-          childAspectRatio: constraints.maxWidth > 1400 ? 2.2 : 2.5,
-          children: [
-            StatCard(
-              title: 'Total Students',
-              value: viewModel.totalStudents.toString(),
-              icon: Icons.people_outline_rounded,
-              color: AppColors.primaryNavy,
-              trend: '+${viewModel.totalStudents > 0 ? "100" : "0"}%',
-            ),
-            StatCard(
-              title: 'Total Drivers',
-              value: viewModel.totalDrivers.toString(),
-              icon: Icons.drive_eta_rounded,
-              color: AppColors.accentAmber,
-              trend: '+${viewModel.totalDrivers > 0 ? "100" : "0"}%',
-            ),
-            StatCard(
-              title: 'Total Revenue',
-              value: '\$${viewModel.totalRevenue.toStringAsFixed(0)}',
-              icon: Icons.account_balance_wallet_rounded,
-              color: AppColors.staffOnly,
-              trend: '+8%',
-            ),
-            StatCard(
-              title: 'Pending Alerts',
-              value: viewModel.pendingAlerts.toString(),
-              icon: Icons.warning_amber_rounded,
-              color: AppColors.error,
-              trend: '-2%',
-            ),
-          ],
+    // Optimization: Selector to only rebuild stats when they change
+    return Selector<DashboardViewModel, Map<String, dynamic>>(
+      selector: (_, vm) => {
+        'students': vm.totalStudents,
+        'drivers': vm.totalDrivers,
+        'revenue': vm.totalRevenue,
+        'alerts': vm.pendingAlerts,
+      },
+      builder: (context, stats, _) {
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            return GridView.count(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisCount: constraints.maxWidth > 1400 ? 4 : (constraints.maxWidth > 700 ? 2 : 1),
+              crossAxisSpacing: 24,
+              mainAxisSpacing: 24,
+              childAspectRatio: constraints.maxWidth > 1400 ? 2.2 : 2.5,
+              children: [
+                StatCard(
+                  title: 'Total Students',
+                  value: stats['students'].toString(),
+                  icon: Icons.people_outline_rounded,
+                  color: AppColors.primaryNavy,
+                  trend: '+${stats['students'] > 0 ? "100" : "0"}%',
+                ),
+                StatCard(
+                  title: 'Total Drivers',
+                  value: stats['drivers'].toString(),
+                  icon: Icons.drive_eta_rounded,
+                  color: AppColors.accentAmber,
+                  trend: '+${stats['drivers'] > 0 ? "100" : "0"}%',
+                ),
+                StatCard(
+                  title: 'Total Revenue',
+                  value: '\$${stats['revenue'].toStringAsFixed(0)}',
+                  icon: Icons.account_balance_wallet_rounded,
+                  color: AppColors.staffOnly,
+                  trend: '+8%',
+                ),
+                StatCard(
+                  title: 'Pending Alerts',
+                  value: stats['alerts'].toString(),
+                  icon: Icons.warning_amber_rounded,
+                  color: AppColors.error,
+                  trend: '-2%',
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -215,7 +269,7 @@ class StatCard extends StatelessWidget {
         border: Border.all(color: AppColors.borderLight),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
+            color: Colors.black.withOpacity(0.02),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -226,7 +280,7 @@ class StatCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
+              color: color.withOpacity(0.1),
               borderRadius: BorderRadius.circular(16),
             ),
             child: Icon(icon, color: color, size: 32),
@@ -260,7 +314,7 @@ class StatCard extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: trend.startsWith('+') ? Colors.green.withValues(alpha: 0.1) : Colors.red.withValues(alpha: 0.1),
+                        color: trend.startsWith('+') ? Colors.green.withOpacity(0.1) : Colors.red.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Text(
@@ -324,7 +378,7 @@ class DashboardChart extends StatelessWidget {
                   items: ['Daily', 'Weekly', 'Monthly'].map((String value) {
                     return DropdownMenuItem<String>(
                       value: value,
-                      child: Text(value, style: const TextStyle(fontSize: 13, color: Colors.white70)),
+                      child: Text(value, style: const TextStyle(fontSize: 13)),
                     );
                   }).toList(),
                   onChanged: (_) {},
@@ -336,16 +390,7 @@ class DashboardChart extends StatelessWidget {
           Expanded(
             child: LineChart(
               LineChartData(
-                gridData: FlGridData(
-                  show: true,
-                  drawVerticalLine: false,
-                  getDrawingHorizontalLine: (value) {
-                    return const FlLine(
-                      color: AppColors.borderLight,
-                      strokeWidth: 1,
-                    );
-                  },
-                ),
+                gridData: const FlGridData(show: true, drawVerticalLine: false),
                 titlesData: FlTitlesData(
                   show: true,
                   rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -368,10 +413,8 @@ class DashboardChart extends StatelessWidget {
                   leftTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
-                      getTitlesWidget: (value, meta) {
-                        return Text('${value.toInt()}', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12));
-                      },
                       reservedSize: 35,
+                      getTitlesWidget: (value, meta) => Text('${value.toInt()}', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
                     ),
                   ),
                 ),
@@ -379,53 +422,21 @@ class DashboardChart extends StatelessWidget {
                 lineBarsData: [
                   LineChartBarData(
                     spots: const [
-                      FlSpot(0, 30),
-                      FlSpot(1, 45),
-                      FlSpot(2, 35),
-                      FlSpot(3, 60),
-                      FlSpot(4, 50),
-                      FlSpot(5, 80),
-                      FlSpot(6, 70),
+                      FlSpot(0, 30), FlSpot(1, 45), FlSpot(2, 35), FlSpot(3, 60), FlSpot(4, 50), FlSpot(5, 80), FlSpot(6, 70),
                     ],
                     isCurved: true,
                     color: AppColors.accentAmber,
                     barWidth: 4,
-                    isStrokeCapRound: true,
-                    dotData: FlDotData(
-                      show: true,
-                      getDotPainter: (spot, percent, barData, index) => FlDotCirclePainter(
-                        radius: 4,
-                        color: AppColors.accentAmber,
-                        strokeWidth: 2,
-                        strokeColor: AppColors.cardWhite,
-                      ),
-                    ),
                     belowBarData: BarAreaData(
                       show: true,
                       gradient: LinearGradient(
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
-                        colors: [
-                          AppColors.accentAmber.withValues(alpha: 0.2),
-                          AppColors.accentAmber.withValues(alpha: 0.0),
-                        ],
+                        colors: [AppColors.accentAmber.withOpacity(0.2), AppColors.accentAmber.withOpacity(0)],
                       ),
                     ),
                   ),
                 ],
-                lineTouchData: LineTouchData(
-                  touchTooltipData: LineTouchTooltipData(
-                    getTooltipColor: (spot) => AppColors.textDark,
-                    getTooltipItems: (List<LineBarSpot> touchedBarSpots) {
-                      return touchedBarSpots.map((barSpot) {
-                        return LineTooltipItem(
-                          '${barSpot.y.toInt()} Trips',
-                          const TextStyle(color: AppColors.cardWhite, fontWeight: FontWeight.bold),
-                        );
-                      }).toList();
-                    },
-                  ),
-                ),
               ),
             ),
           ),
@@ -451,14 +462,7 @@ class RecentActivity extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Live Activity',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: AppColors.textDark,
-            ),
-          ),
+          const Text('Live Activity', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
           const SizedBox(height: 24),
           Expanded(
             child: ListView.separated(
@@ -474,15 +478,11 @@ class RecentActivity extends StatelessWidget {
                   {'title': 'Shift Completed', 'time': '2 hours ago', 'icon': Icons.check_circle_rounded, 'color': Colors.purple},
                 ];
                 final activity = activities[index % activities.length];
-                
                 return Row(
                   children: [
                     Container(
                       padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: (activity['color'] as Color).withValues(alpha: 0.1),
-                        shape: BoxShape.circle,
-                      ),
+                      decoration: BoxDecoration(color: (activity['color'] as Color).withOpacity(0.1), shape: BoxShape.circle),
                       child: Icon(activity['icon'] as IconData, color: activity['color'] as Color, size: 18),
                     ),
                     const SizedBox(width: 16),
@@ -490,32 +490,14 @@ class RecentActivity extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            activity['title'] as String,
-                            style: const TextStyle(color: AppColors.textDark, fontSize: 14, fontWeight: FontWeight.w600),
-                          ),
-                          Text(
-                            activity['time'] as String,
-                            style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
-                          ),
+                          Text(activity['title'] as String, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                          Text(activity['time'] as String, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
                         ],
                       ),
                     ),
                   ],
                 );
               },
-            ),
-          ),
-          const SizedBox(height: 16),
-          TextButton(
-            onPressed: () {},
-            child: const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text('View All Activity', style: TextStyle(color: AppColors.accentAmber)),
-                SizedBox(width: 8),
-                Icon(Icons.arrow_forward_rounded, size: 16, color: AppColors.accentAmber),
-              ],
             ),
           ),
         ],

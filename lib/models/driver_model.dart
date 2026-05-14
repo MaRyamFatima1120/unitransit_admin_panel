@@ -82,4 +82,44 @@ class DriverModel {
       createdAt: (map['createdAt'] as Timestamp).toDate(),
     );
   }
+
+  DriverModel copyWith({
+    String? id,
+    String? name,
+    String? phoneNumber,
+    String? email,
+    String? cnic,
+    String? licenseNumber,
+    DateTime? licenseExpiry,
+    String? assignedBus,
+    String? experience,
+    String? status,
+    String? cnicFrontUrl,
+    String? cnicBackUrl,
+    String? profileUrl,
+    String? licenseImageUrl,
+    bool? isVerified,
+    bool? isBlocked,
+    DateTime? createdAt,
+  }) {
+    return DriverModel(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      phoneNumber: phoneNumber ?? this.phoneNumber,
+      email: email ?? this.email,
+      cnic: cnic ?? this.cnic,
+      licenseNumber: licenseNumber ?? this.licenseNumber,
+      licenseExpiry: licenseExpiry ?? this.licenseExpiry,
+      assignedBus: assignedBus ?? this.assignedBus,
+      experience: experience ?? this.experience,
+      status: status ?? this.status,
+      cnicFrontUrl: cnicFrontUrl ?? this.cnicFrontUrl,
+      cnicBackUrl: cnicBackUrl ?? this.cnicBackUrl,
+      profileUrl: profileUrl ?? this.profileUrl,
+      licenseImageUrl: licenseImageUrl ?? this.licenseImageUrl,
+      isVerified: isVerified ?? this.isVerified,
+      isBlocked: isBlocked ?? this.isBlocked,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
 }
