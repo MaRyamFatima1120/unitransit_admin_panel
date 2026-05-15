@@ -81,7 +81,7 @@ class Sidebar extends StatelessWidget {
                 _buildMenuItem(context, 2, Icons.drive_eta_rounded, 'Drivers'),
                 _buildMenuItem(context, 3, Icons.directions_bus_rounded, 'Fleet Operations'),
                 _buildMenuItem(context, 4, Icons.map_rounded, 'Route Planning'),
-                _buildMenuItem(context, 5, Icons.bar_chart_rounded, 'Performance Reports'),
+                _buildMenuItem(context, 5, Icons.category_rounded, 'Gender Config'),
                 _buildMenuItem(context, 6, Icons.history_rounded, 'Trip History'),
                 _buildMenuItem(context, 7, Icons.notifications_active_rounded, 'Notifications'),
                 _buildMenuItem(context, 8, Icons.support_agent_rounded, 'Support Center'),

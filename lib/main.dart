@@ -12,6 +12,10 @@ import 'package:unitransit_admin/view_models/dashboard_view_model.dart';
 import 'package:unitransit_admin/view_models/route_planning_view_model.dart';
 import 'package:unitransit_admin/view_models/drivers_view_model.dart';
 import 'package:unitransit_admin/view_models/students_view_model.dart';
+import 'package:unitransit_admin/view_models/gender_config_view_model.dart';
+import 'package:unitransit_admin/view_models/support_view_model.dart';
+import 'package:unitransit_admin/view_models/app_settings_view_model.dart';
+import 'package:unitransit_admin/view_models/login_view_model.dart';
 import 'package:unitransit_admin/views/login_screen.dart';
 import 'package:unitransit_admin/views/splash_screen.dart';
 
@@ -22,10 +26,15 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+  
+  // Upload initial "About" info to Firebase if it doesn't exist
+  FirebaseService().uploadInitialAppInfo();
+
   runApp(
     MultiProvider(
       providers: [
         Provider(create: (_) => FirebaseService()),
+        ChangeNotifierProvider(create: (_) => LoginViewModel()),
         ChangeNotifierProvider(create: (_) => DashboardViewModel()),
         ChangeNotifierProvider(
           create: (context) => RoutePlanningViewModel(
@@ -39,6 +48,21 @@ void main() async {
         ),
         ChangeNotifierProvider(
           create: (context) => StudentsViewModel(
+            Provider.of<FirebaseService>(context, listen: false),
+          ),
+        ),
+        ChangeNotifierProvider(
+          create: (context) => GenderConfigViewModel(
+            Provider.of<FirebaseService>(context, listen: false),
+          ),
+        ),
+        ChangeNotifierProvider(
+          create: (context) => SupportViewModel(
+            Provider.of<FirebaseService>(context, listen: false),
+          ),
+        ),
+        ChangeNotifierProvider(
+          create: (context) => AppSettingsViewModel(
             Provider.of<FirebaseService>(context, listen: false),
           ),
         ),
