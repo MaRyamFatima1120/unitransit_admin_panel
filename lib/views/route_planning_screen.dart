@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -33,13 +34,15 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> with SingleTi
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(32.0),
+    final isMobile = AppResponsiveUtil.isMobile(context);
+    
+    return Container(
+      padding: EdgeInsets.all(isMobile ? 16.0 : 32.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildHeader(),
-          const SizedBox(height: 32),
+          _buildHeader(context),
+          const SizedBox(height: 24),
           _buildTabBar(),
           const SizedBox(height: 24),
           Expanded(
@@ -57,21 +60,39 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> with SingleTi
     );
   }
 
-  Widget _buildHeader() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildHeader(BuildContext context) {
+    final isMobile = AppResponsiveUtil.isMobile(context);
+    return Row(
       children: [
-        Text(
-          'Route & Map Management',
-          style: GoogleFonts.poppins(
-            fontSize: 28,
-            fontWeight: FontWeight.bold,
-            color: AppColors.textDark,
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: AppColors.primaryNavy.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(12),
           ),
+          child: Icon(Icons.map_rounded, color: AppColors.primaryNavy, size: isMobile ? 20 : 28),
         ),
-        Text(
-          'Configure hubs, define official routes, and upload map polylines.',
-          style: GoogleFonts.poppins(color: AppColors.textSecondary, fontSize: 14),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Route & Map',
+                style: GoogleFonts.poppins(
+                  fontSize: isMobile ? 20 : 28,
+                  fontWeight: FontWeight.w900,
+                  color: AppColors.textDark,
+                  letterSpacing: -0.5,
+                ),
+              ),
+              if (!isMobile)
+                Text(
+                  'Configure campuses, define routes, and manage map paths.',
+                  style: GoogleFonts.poppins(color: AppColors.textSecondary.withValues(alpha: 0.7), fontSize: 13),
+                ),
+            ],
+          ),
         ),
       ],
     );
@@ -79,29 +100,26 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> with SingleTi
 
   Widget _buildTabBar() {
     return Container(
+      height: 54,
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        color: AppColors.backgroundLight,
+        borderRadius: BorderRadius.circular(12),
       ),
       child: TabBar(
         controller: _tabController,
-        labelColor: AppColors.primaryNavy,
-        unselectedLabelColor: Colors.grey,
-        indicatorColor: AppColors.primaryNavy,
-        indicatorWeight: 3,
-        indicatorSize: TabBarIndicatorSize.label,
-        labelStyle: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 15),
+        labelColor: Colors.white,
+        unselectedLabelColor: AppColors.textSecondary,
+        indicator: BoxDecoration(
+          color: AppColors.primaryNavy,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        indicatorSize: TabBarIndicatorSize.tab,
+        dividerColor: Colors.transparent,
+        labelStyle: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 13),
         tabs: const [
-          Tab(text: '1. Hubs Manager', icon: Icon(Icons.location_on_rounded)),
-          Tab(text: '2. Route Definition', icon: Icon(Icons.route_rounded)),
-          Tab(text: '3. Polyline Uploader', icon: Icon(Icons.map_rounded)),
+          Tab(text: 'Hubs'),
+          Tab(text: 'Routes'),
+          Tab(text: 'Paths'),
         ],
       ),
     );
@@ -116,169 +134,162 @@ class HubsManagerSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final viewModel = context.watch<RoutePlanningViewModel>();
     final firebaseService = context.read<FirebaseService>();
-    final isMobile = AppResponsiveUtil.isMobile(context);
-
-    Widget content = Flex(
-      direction: isMobile ? Axis.vertical : Axis.horizontal,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Form
-        SizedBox(
-          width: isMobile ? double.infinity : 400,
-          child: Container(
-            padding: const EdgeInsets.all(24.0),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: AppColors.borderLight),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  viewModel.editingHubName != null ? 'Edit Campus/Stop' : 'Add New Campus/Stop', 
-                  style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold)
-                ),
-                const SizedBox(height: 20),
-                _buildTextField(viewModel.nameController, 'Campus or Stop Name', Icons.business_rounded),
-                const SizedBox(height: 16),
-                _buildTextField(viewModel.latController, 'Latitude', Icons.location_on_outlined, isNumber: true),
-                const SizedBox(height: 16),
-                _buildTextField(viewModel.lngController, 'Longitude', Icons.location_on_outlined, isNumber: true),
-                const SizedBox(height: 24),
-                Row(
-                  children: [
-                    if (viewModel.editingHubName != null)
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: OutlinedButton(
-                            onPressed: () => viewModel.setEditingHub(null),
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 15),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            ),
-                            child: const Text('Cancel'),
-                          ),
-                        ),
-                      ),
-                    Expanded(
-                      flex: 2,
-                      child: ElevatedButton(
-                        onPressed: viewModel.isHubSaving ? null : () async {
-                          await viewModel.saveHub();
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Operation Successful!'), backgroundColor: Colors.green),
-                            );
-                          }
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: viewModel.editingHubName != null ? Colors.blue[800] : AppColors.primaryNavy,
-                          padding: const EdgeInsets.symmetric(vertical: 15),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        child: viewModel.isHubSaving 
-                          ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                          : Text(
-                              viewModel.editingHubName != null ? 'Update Stop' : 'Save Hub', 
-                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)
-                            ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-        if (!isMobile) const SizedBox(width: 24),
-        if (isMobile) const SizedBox(height: 24),
-        // List
-        Expanded(
-          flex: isMobile ? 0 : 2,
-          child: Container(
-            constraints: BoxConstraints(minHeight: isMobile ? 400 : 0),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: AppColors.borderLight),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: isMobile ? MainAxisSize.min : MainAxisSize.max,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(24.0),
-                  child: Text('Existing Campuses/Stops', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold)),
-                ),
-                const Divider(height: 1),
-                SizedBox(
-                  height: 500,
-                  child: StreamBuilder<List<HubModel>>(
-                    stream: firebaseService.getHubs(),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const Center(child: CircularProgressIndicator());
-                      }
-                      final hubs = snapshot.data ?? [];
-                      if (hubs.isEmpty) return const Center(child: Text('No hubs found.'));
-
-                      return ListView.separated(
-                        shrinkWrap: true,
-                        itemCount: hubs.length,
-                        separatorBuilder: (context, index) => const Divider(height: 1),
-                        itemBuilder: (context, index) {
-                          final hub = hubs[index];
-                          return ListTile(
-                            leading: CircleAvatar(
-                              backgroundColor: AppColors.primaryNavy.withOpacity(0.1),
-                              child: const Icon(Icons.location_on, color: AppColors.primaryNavy, size: 20),
-                            ),
-                            title: Text(hub.name, style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
-                            subtitle: Text('Lat: ${hub.latitude}, Lng: ${hub.longitude}'),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  icon: const Icon(Icons.edit_outlined, color: Colors.blue),
-                                  onPressed: () => viewModel.setEditingHub(hub),
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                                  onPressed: () => viewModel.deleteHub(hub.name),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
+    final isDesktop = AppResponsiveUtil.isDesktop(context);
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.only(bottom: 40),
-      child: content,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 24),
+        child: Flex(
+          direction: isDesktop ? Axis.horizontal : Axis.vertical,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: isDesktop ? 380 : double.infinity,
+              child: _buildFormPanel(viewModel),
+            ),
+            if (isDesktop) const SizedBox(width: 24),
+            if (!isDesktop) const SizedBox(height: 24),
+            if (isDesktop)
+              Expanded(child: _buildListPanel(firebaseService, viewModel))
+            else
+              _buildListPanel(firebaseService, viewModel),
+          ],
+        ),
+      ),
     );
   }
 
-  Widget _buildTextField(TextEditingController controller, String label, IconData icon, {bool isNumber = false}) {
-    return TextFormField(
-      controller: controller,
-      keyboardType: isNumber ? const TextInputType.numberWithOptions(decimal: true) : TextInputType.text,
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon, color: AppColors.primaryNavy),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-        filled: true,
-        fillColor: Colors.grey[50],
+  Widget _buildFormPanel(RoutePlanningViewModel viewModel) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.borderLight),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            viewModel.editingHubName != null ? 'Edit Hub' : 'Create Hub',
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textDark),
+          ),
+          const SizedBox(height: 24),
+          _buildFieldLabel('Location Name'),
+          _buildModernField(viewModel.nameController, 'e.g. Baghdad Campus', Icons.business_rounded),
+          const SizedBox(height: 16),
+          _buildFieldLabel('Latitude'),
+          _buildModernField(viewModel.latController, 'e.g. 29.37', Icons.gps_fixed_rounded, isNumber: true),
+          const SizedBox(height: 16),
+          _buildFieldLabel('Longitude'),
+          _buildModernField(viewModel.lngController, 'e.g. 71.72', Icons.gps_fixed_rounded, isNumber: true),
+          const SizedBox(height: 32),
+          Row(
+            children: [
+              if (viewModel.editingHubName != null)
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: OutlinedButton(
+                      onPressed: () => viewModel.setEditingHub(null),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: const Text('Cancel'),
+                    ),
+                  ),
+                ),
+              Expanded(
+                flex: 2,
+                child: ElevatedButton(
+                  onPressed: viewModel.isHubSaving ? null : () => viewModel.saveHub(),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primaryNavy,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    elevation: 0,
+                  ),
+                  child: viewModel.isHubSaving
+                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                      : Text(viewModel.editingHubName != null ? 'Update' : 'Save Hub', style: const TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildListPanel(FirebaseService firebaseService, RoutePlanningViewModel viewModel) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.borderLight),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.all(24),
+            child: Text('All Hubs', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          ),
+          const Divider(height: 1),
+          StreamBuilder<List<HubModel>>(
+            stream: firebaseService.getHubs(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) return const Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator()));
+              final hubs = snapshot.data ?? [];
+              if (hubs.isEmpty) return _buildEmptyState('No hubs defined.');
+
+              return ListView.separated(
+                padding: const EdgeInsets.all(16),
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: hubs.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                itemBuilder: (context, index) {
+                  final hub = hubs[index];
+                  return _buildHubCard(context, hub, viewModel);
+                },
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHubCard(BuildContext context, HubModel hub, RoutePlanningViewModel viewModel) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.backgroundLight.withValues(alpha: 0.3),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.borderLight),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.location_on_rounded, color: Colors.green.withValues(alpha: 0.7), size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(hub.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                Text('${hub.latitude}, ${hub.longitude}', style: const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+              ],
+            ),
+          ),
+          _buildActionMenu(context, 
+            onEdit: () => viewModel.setEditingHub(hub),
+            onDelete: () => viewModel.deleteHub(hub.name),
+            deleteMsg: 'Delete this hub?'
+          ),
+        ],
       ),
     );
   }
@@ -292,237 +303,150 @@ class RouteDefinitionSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final viewModel = context.watch<RoutePlanningViewModel>();
     final firebaseService = context.read<FirebaseService>();
-    final isMobile = AppResponsiveUtil.isMobile(context);
+    final isDesktop = AppResponsiveUtil.isDesktop(context);
 
     return StreamBuilder<List<HubModel>>(
       stream: firebaseService.getHubs(),
       builder: (context, hubSnapshot) {
         final hubs = hubSnapshot.data ?? [];
         
-        Widget content = Flex(
-          direction: isMobile ? Axis.vertical : Axis.horizontal,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              width: isMobile ? double.infinity : 400,
-              child: Card(
-                elevation: 0,
-                child: Padding(
-                  padding: const EdgeInsets.all(24.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        viewModel.editingRouteId != null ? 'Edit Bus Route' : 'Define New Bus Route', 
-                        style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold)
-                      ),
-                      const SizedBox(height: 20),
-                      TextFormField(
-                        controller: viewModel.routeNameController,
-                        decoration: InputDecoration(
-                          labelText: 'Bus Route Name',
-                          prefixIcon: const Icon(Icons.edit_road_rounded, color: AppColors.primaryNavy),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                          filled: true,
-                          fillColor: Colors.grey[50],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      DropdownButtonFormField<String>(
-                        value: viewModel.fromHub,
-                        decoration: InputDecoration(
-                          labelText: 'Starting Point',
-                          prefixIcon: const Icon(Icons.start_rounded, color: Colors.green),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        items: hubs.map((h) => DropdownMenuItem<String>(value: h.name, child: Text(h.name))).toList(),
-                        onChanged: (v) => viewModel.setFromHub(v),
-                      ),
-                      const SizedBox(height: 16),
-                      DropdownButtonFormField<String>(
-                        value: viewModel.toHub,
-                        decoration: InputDecoration(
-                          labelText: 'Destination Point',
-                          prefixIcon: const Icon(Icons.location_on_rounded, color: Colors.red),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        items: hubs.map((h) => DropdownMenuItem<String>(value: h.name, child: Text(h.name))).toList(),
-                        onChanged: (v) => viewModel.setToHub(v),
-                      ),
-                      const SizedBox(height: 16),
-                      DropdownButtonFormField<String>(
-                        value: viewModel.selectedGender,
-                        decoration: InputDecoration(
-                          labelText: 'Service Type (Gender)',
-                          prefixIcon: Icon(
-                            viewModel.selectedGender == 'Girls' 
-                                ? Icons.female_rounded 
-                                : viewModel.selectedGender == 'Boys' 
-                                    ? Icons.male_rounded 
-                                    : Icons.people_rounded, 
-                            color: viewModel.selectedGender == 'Girls' 
-                                ? Colors.pinkAccent 
-                                : viewModel.selectedGender == 'Boys' 
-                                    ? Colors.blueAccent 
-                                    : AppColors.primaryNavy,
-                          ),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        items: ['Combined', 'Girls', 'Boys'].map((g) => DropdownMenuItem<String>(
-                          value: g, 
-                          child: Text(g)
-                        )).toList(),
-                        onChanged: (v) => viewModel.setSelectedGender(v),
-                      ),
-                      const SizedBox(height: 24),
-                      Row(
-                        children: [
-                          if (viewModel.editingRouteId != null)
-                            Expanded(
-                              child: Padding(
-                                padding: const EdgeInsets.only(right: 8),
-                                child: OutlinedButton(
-                                  onPressed: () => viewModel.setEditingRoute(null),
-                                  style: OutlinedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(vertical: 15),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                  ),
-                                  child: const Text('Cancel'),
-                                ),
-                              ),
-                            ),
-                          Expanded(
-                            flex: 2,
-                            child: ElevatedButton(
-                              onPressed: viewModel.isRouteSaving ? null : () async {
-                                await viewModel.saveRoute();
-                                if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Route Saved!'), backgroundColor: Colors.green),
-                                  );
-                                }
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: viewModel.editingRouteId != null ? Colors.blue[800] : AppColors.primaryNavy,
-                                padding: const EdgeInsets.symmetric(vertical: 15),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              ),
-                              child: viewModel.isRouteSaving 
-                                ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                                : Text(
-                                    viewModel.editingRouteId != null ? 'Update Route' : 'Save Route', 
-                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)
-                                  ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            if (!isMobile) const SizedBox(width: 24),
-            if (isMobile) const SizedBox(height: 24),
-            Expanded(
-              flex: isMobile ? 0 : 3,
-              child: Card(
-                elevation: 0,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: isMobile ? MainAxisSize.min : MainAxisSize.max,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.all(24.0),
-                      child: Text('Current Routes', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold)),
-                    ),
-                    const Divider(height: 1),
-                    SizedBox(
-                      height: 500,
-                      child: StreamBuilder<QuerySnapshot>(
-                        stream: FirebaseFirestore.instance.collection('schedules').snapshots(),
-                        builder: (context, snapshot) {
-                          if (snapshot.connectionState == ConnectionState.waiting) {
-                            return const Center(child: CircularProgressIndicator());
-                          }
-                          final docs = snapshot.data?.docs ?? [];
-                          return ListView.separated(
-                            shrinkWrap: true,
-                            itemCount: docs.length,
-                            separatorBuilder: (context, index) => const Divider(height: 1),
-                            itemBuilder: (context, index) {
-                              final data = docs[index].data() as Map<String, dynamic>;
-                              final route = BusSchedule.fromMap(docs[index].id, data);
-                              return ListTile(
-                                leading: CircleAvatar(
-                                  backgroundColor: route.type == 'Girls' 
-                                      ? Colors.pinkAccent.withOpacity(0.1) 
-                                      : route.type == 'Boys' 
-                                          ? Colors.blueAccent.withOpacity(0.1) 
-                                          : AppColors.primaryNavy.withOpacity(0.1),
-                                  child: Icon(
-                                    route.type == 'Girls' 
-                                        ? Icons.female_rounded 
-                                        : route.type == 'Boys' 
-                                            ? Icons.male_rounded 
-                                            : Icons.people_rounded,
-                                    color: route.type == 'Girls' 
-                                        ? Colors.pinkAccent 
-                                        : route.type == 'Boys' 
-                                            ? Colors.blueAccent 
-                                            : AppColors.primaryNavy,
-                                    size: 20,
-                                  ),
-                                ),
-                                title: Text(route.route, style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
-                                subtitle: Row(
-                                  children: [
-                                    Text('${route.from} ➔ ${route.to}', style: const TextStyle(fontSize: 12)),
-                                    const SizedBox(width: 8),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: Colors.grey[200],
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      child: Text(
-                                        route.type.toUpperCase(),
-                                        style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.grey[600]),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                trailing: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    IconButton(
-                                      icon: const Icon(Icons.edit_outlined, color: Colors.blue),
-                                      onPressed: () => viewModel.setEditingRoute(route),
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(Icons.delete_sweep_outlined, color: Colors.redAccent),
-                                      onPressed: () => viewModel.deleteRoute(route.id, route.route),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            },
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        );
-
         return SingleChildScrollView(
-          padding: const EdgeInsets.only(bottom: 40),
-          child: content,
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 24),
+            child: Flex(
+              direction: isDesktop ? Axis.horizontal : Axis.vertical,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: isDesktop ? 380 : double.infinity,
+                  child: _buildRouteForm(viewModel, hubs),
+                ),
+                if (isDesktop) const SizedBox(width: 24),
+                if (!isDesktop) const SizedBox(height: 24),
+                if (isDesktop)
+                  Expanded(child: _buildRouteList(viewModel))
+                else
+                  _buildRouteList(viewModel),
+              ],
+            ),
+          ),
         );
       },
+    );
+  }
+
+  Widget _buildRouteForm(RoutePlanningViewModel viewModel, List<HubModel> hubs) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.borderLight),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Route Builder', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 24),
+          _buildFieldLabel('Route Name'),
+          _buildModernField(viewModel.routeNameController, 'e.g. Route A', Icons.edit_road_rounded),
+          const SizedBox(height: 16),
+          _buildFieldLabel('From'),
+          _buildModernDropdown(viewModel.fromHub, hubs.map((h) => h.name).toList(), 'Start Hub', Icons.start_rounded, Colors.green, (v) => viewModel.setFromHub(v)),
+          const SizedBox(height: 16),
+          _buildFieldLabel('To'),
+          _buildModernDropdown(viewModel.toHub, hubs.map((h) => h.name).toList(), 'Destination Hub', Icons.location_on_rounded, Colors.red, (v) => viewModel.setToHub(v)),
+          const SizedBox(height: 32),
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton(
+              onPressed: viewModel.isRouteSaving ? null : () => viewModel.saveRoute(),
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryNavy, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+              child: viewModel.isRouteSaving
+                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                  : Text(viewModel.editingRouteId != null ? 'Update Route' : 'Create Route', style: const TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRouteList(RoutePlanningViewModel viewModel) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.borderLight),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.all(24),
+            child: Text('Active Routes', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          ),
+          const Divider(height: 1),
+          StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance.collection('schedules').snapshots(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) return const Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator()));
+              final docs = snapshot.data?.docs ?? [];
+              if (docs.isEmpty) return _buildEmptyState('No routes defined.');
+
+              return ListView.separated(
+                padding: const EdgeInsets.all(16),
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: docs.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                itemBuilder: (context, index) {
+                  final data = docs[index].data() as Map<String, dynamic>;
+                  final route = BusSchedule.fromMap(docs[index].id, data);
+                  return _buildRouteCard(context, route, viewModel);
+                },
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRouteCard(BuildContext context, BusSchedule route, RoutePlanningViewModel viewModel) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.borderLight),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(route.route, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Text(route.from, style: const TextStyle(color: Colors.green, fontSize: 12, fontWeight: FontWeight.w600)),
+                    const Icon(Icons.arrow_right_alt, size: 16, color: AppColors.textSecondary),
+                    Text(route.to, style: const TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          _buildActionMenu(context, 
+            onEdit: () => viewModel.setEditingRoute(route),
+            onDelete: () => viewModel.deleteRoute(route.id, route.route),
+            deleteMsg: 'Delete this route?'
+          ),
+        ],
+      ),
     );
   }
 }
@@ -535,161 +459,227 @@ class PolylineUploaderSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final viewModel = context.watch<RoutePlanningViewModel>();
     final firebaseService = context.read<FirebaseService>();
-    final isMobile = AppResponsiveUtil.isMobile(context);
-
-    Widget content = Flex(
-      direction: isMobile ? Axis.vertical : Axis.horizontal,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Left Side: Upload Form
-        SizedBox(
-          width: isMobile ? double.infinity : 400,
-          child: Card(
-            elevation: 0,
-            child: Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Upload Map Path', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Paste JSON array of coordinates.',
-                    style: GoogleFonts.poppins(color: Colors.grey[600], fontSize: 12),
-                  ),
-                  const SizedBox(height: 24),
-                  StreamBuilder<QuerySnapshot>(
-                    stream: FirebaseFirestore.instance.collection('schedules').snapshots(),
-                    builder: (context, snapshot) {
-                      final routes = snapshot.data?.docs ?? [];
-                      return DropdownButtonFormField<String>(
-                        value: viewModel.selectedRouteForPolyline,
-                        decoration: InputDecoration(
-                          labelText: 'Select Route',
-                          prefixIcon: const Icon(Icons.route_outlined, color: AppColors.primaryNavy),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        items: routes.map((doc) {
-                          final data = doc.data() as Map<String, dynamic>;
-                          final name = data['route'] ?? 'Unknown';
-                          return DropdownMenuItem<String>(value: name, child: Text(name));
-                        }).toList(),
-                        onChanged: (v) => viewModel.setSelectedRouteForPolyline(v),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    height: 200,
-                    child: TextFormField(
-                      controller: viewModel.jsonController,
-                      maxLines: null,
-                      expands: true,
-                      textAlignVertical: TextAlignVertical.top,
-                      style: GoogleFonts.firaCode(fontSize: 12),
-                      decoration: InputDecoration(
-                        hintText: '[{"lat": ...}]',
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                        filled: true,
-                        fillColor: Colors.grey[50],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton.icon(
-                      onPressed: viewModel.isPolylineSaving ? null : () async {
-                        await viewModel.uploadPolyline();
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Polyline Uploaded!'), backgroundColor: Colors.green),
-                          );
-                        }
-                      },
-                      icon: const Icon(Icons.cloud_upload_rounded, color: Colors.white, size: 20),
-                      label: const Text('Save Path', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primaryNavy,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        if (!isMobile) const SizedBox(width: 24),
-        if (isMobile) const SizedBox(height: 24),
-        // Right Side: Status List
-        Expanded(
-          flex: isMobile ? 0 : 3,
-          child: Card(
-            elevation: 0,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: isMobile ? MainAxisSize.min : MainAxisSize.max,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(24.0),
-                  child: Text('Map Path Status', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold)),
-                ),
-                const Divider(height: 1),
-                SizedBox(
-                  height: 500,
-                  child: StreamBuilder<Map<String, dynamic>>(
-                    stream: firebaseService.getPolylinesStatus(),
-                    builder: (context, polylineSnapshot) {
-                      final polylines = polylineSnapshot.data ?? {};
-                      
-                      return StreamBuilder<QuerySnapshot>(
-                        stream: FirebaseFirestore.instance.collection('schedules').snapshots(),
-                        builder: (context, routeSnapshot) {
-                          if (routeSnapshot.connectionState == ConnectionState.waiting) {
-                            return const Center(child: CircularProgressIndicator());
-                          }
-                          final routes = routeSnapshot.data?.docs ?? [];
-                          if (routes.isEmpty) return const Center(child: Text('No routes defined.'));
-
-                          return ListView.separated(
-                            shrinkWrap: true,
-                            itemCount: routes.length,
-                            separatorBuilder: (context, index) => const Divider(height: 1),
-                            itemBuilder: (context, index) {
-                              final data = routes[index].data() as Map<String, dynamic>;
-                              final routeName = data['route'] ?? 'Unknown';
-                              final hasPolyline = polylines.containsKey(routeName);
-
-                              return ListTile(
-                                leading: Icon(
-                                  hasPolyline ? Icons.check_circle_rounded : Icons.pending_rounded,
-                                  color: hasPolyline ? Colors.green : Colors.orange,
-                                ),
-                                title: Text(routeName, style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
-                                subtitle: Text(hasPolyline ? 'Path Uploaded' : 'No Path Found'),
-                                trailing: hasPolyline 
-                                  ? const Icon(Icons.map_outlined, color: Colors.blue)
-                                  : const Icon(Icons.warning_amber_rounded, color: Colors.orange),
-                              );
-                            },
-                          );
-                        },
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
+    final isDesktop = AppResponsiveUtil.isDesktop(context);
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.only(bottom: 40),
-      child: content,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 24),
+        child: Flex(
+          direction: isDesktop ? Axis.horizontal : Axis.vertical,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: isDesktop ? 380 : double.infinity,
+              child: _buildPolylineForm(viewModel),
+            ),
+            if (isDesktop) const SizedBox(width: 24),
+            if (!isDesktop) const SizedBox(height: 24),
+            if (isDesktop)
+              Expanded(child: _buildPolylineStatus(firebaseService))
+            else
+              _buildPolylineStatus(firebaseService),
+          ],
+        ),
+      ),
     );
   }
+
+  Widget _buildPolylineForm(RoutePlanningViewModel viewModel) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.borderLight),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Path Sync', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 24),
+          _buildFieldLabel('Select Route'),
+          StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance.collection('schedules').snapshots(),
+            builder: (context, snapshot) {
+              final routes = snapshot.data?.docs ?? [];
+              return _buildModernDropdown(
+                viewModel.selectedRouteForPolyline, 
+                routes.map((d) => (d.data() as Map)['route'].toString()).toList(), 
+                'Route', Icons.alt_route_rounded, AppColors.primaryNavy, (v) => viewModel.setSelectedRouteForPolyline(v)
+              );
+            },
+          ),
+          const SizedBox(height: 16),
+          _buildFieldLabel('Coordinates (JSON)'),
+          Container(
+            height: 120,
+            decoration: BoxDecoration(color: AppColors.backgroundLight, borderRadius: BorderRadius.circular(12)),
+            child: TextField(
+              controller: viewModel.jsonController,
+              maxLines: null,
+              expands: true,
+              style: GoogleFonts.firaCode(fontSize: 10),
+              decoration: const InputDecoration(border: InputBorder.none, contentPadding: EdgeInsets.all(12)),
+            ),
+          ),
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton.icon(
+              onPressed: viewModel.isPolylineSaving ? null : () => viewModel.uploadPolyline(),
+              icon: const Icon(Icons.sync_rounded),
+              label: const Text('Sync Path', style: TextStyle(fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryNavy, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPolylineStatus(FirebaseService firebaseService) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.borderLight),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.all(24),
+            child: Text('Status', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          ),
+          const Divider(height: 1),
+          StreamBuilder<Map<String, dynamic>>(
+            stream: firebaseService.getPolylinesStatus(),
+            builder: (context, polylineSnapshot) {
+              final polylines = polylineSnapshot.data ?? {};
+              return StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance.collection('schedules').snapshots(),
+                builder: (context, routeSnapshot) {
+                  final routes = routeSnapshot.data?.docs ?? [];
+                  if (routes.isEmpty) return _buildEmptyState('No routes.');
+
+                  return ListView.separated(
+                    padding: const EdgeInsets.all(16),
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: routes.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                    itemBuilder: (context, index) {
+                      final data = routes[index].data() as Map<String, dynamic>;
+                      final routeName = data['route'] ?? 'Unknown';
+                      final hasPolyline = polylines.containsKey(routeName);
+
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: hasPolyline ? Colors.green.withValues(alpha: 0.05) : Colors.orange.withValues(alpha: 0.05),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(hasPolyline ? Icons.check_circle : Icons.error_outline, color: hasPolyline ? Colors.green : Colors.orange, size: 18),
+                            const SizedBox(width: 12),
+                            Expanded(child: Text(routeName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+                            Text(hasPolyline ? 'Live' : 'Missing', style: TextStyle(color: hasPolyline ? Colors.green : Colors.orange, fontSize: 10, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      );
+                    },
+                  );
+                },
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// --- SHARED HELPER WIDGETS ---
+
+Widget _buildFieldLabel(String label) {
+  return Padding(
+    padding: const EdgeInsets.only(bottom: 6.0),
+    child: Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textDark)),
+  );
+}
+
+Widget _buildModernField(TextEditingController controller, String hint, IconData icon, {bool isNumber = false}) {
+  return TextField(
+    controller: controller,
+    keyboardType: isNumber ? const TextInputType.numberWithOptions(decimal: true) : TextInputType.text,
+    style: const TextStyle(fontSize: 13),
+    decoration: InputDecoration(
+      hintText: hint,
+      prefixIcon: Icon(icon, color: AppColors.primaryNavy, size: 18),
+      filled: true,
+      fillColor: AppColors.backgroundLight,
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+    ),
+  );
+}
+
+Widget _buildModernDropdown(String? value, List<String> items, String hint, IconData icon, Color iconColor, Function(String?) onChanged) {
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 12),
+    decoration: BoxDecoration(color: AppColors.backgroundLight, borderRadius: BorderRadius.circular(10)),
+    child: DropdownButtonHideUnderline(
+      child: DropdownButton<String>(
+        value: value,
+        isExpanded: true,
+        hint: Row(
+          children: [
+            Icon(icon, color: iconColor, size: 18),
+            const SizedBox(width: 10),
+            Text(hint, style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+          ],
+        ),
+        icon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.textSecondary, size: 18),
+        items: items.map((t) => DropdownMenuItem(value: t, child: Text(t, style: const TextStyle(fontSize: 13)))).toList(),
+        onChanged: onChanged,
+      ),
+    ),
+  );
+}
+
+Widget _buildActionMenu(BuildContext context, {required VoidCallback onEdit, required VoidCallback onDelete, required String deleteMsg}) {
+  return PopupMenuButton<String>(
+    onSelected: (v) {
+      if (v == 'edit') onEdit();
+      if (v == 'delete') {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Confirm'),
+            content: Text(deleteMsg),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text('No')),
+              TextButton(onPressed: () { onDelete(); Navigator.pop(context); }, child: const Text('Yes')),
+            ],
+          ),
+        );
+      }
+    },
+    icon: const Icon(Icons.more_vert, size: 18, color: AppColors.textSecondary),
+    itemBuilder: (context) => [
+      const PopupMenuItem(value: 'edit', child: Text('Edit')),
+      const PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: Colors.red))),
+    ],
+  );
+}
+
+Widget _buildEmptyState(String msg) {
+  return Center(
+    child: Padding(
+      padding: const EdgeInsets.all(32),
+      child: Text(msg, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+    ),
+  );
 }

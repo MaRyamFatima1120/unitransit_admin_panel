@@ -13,6 +13,7 @@ import 'package:unitransit_admin/views/support_screen.dart';
 import 'package:unitransit_admin/views/settings_screen.dart';
 import 'package:unitransit_admin/views/fleet_operations_screen.dart';
 import 'package:unitransit_admin/views/route_planning_screen.dart';
+import 'package:unitransit_admin/views/gender_config_screen.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
@@ -42,7 +43,7 @@ class DashboardScreen extends StatelessWidget {
                           DriversScreen(),
                           FleetOperationsScreen(),
                           RoutePlanningScreen(),
-                          Center(child: Text('Performance Reports - Coming Soon')),
+                          GenderConfigScreen(),
                           Center(child: Text('Trip History - Coming Soon')),
                           NotificationsScreen(),
                           SupportScreen(),

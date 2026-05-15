@@ -8,6 +8,7 @@ import 'package:unitransit_admin/models/driver_model.dart';
 import 'package:unitransit_admin/models/student_model.dart';
 import 'package:unitransit_admin/models/bus_schedule_model.dart';
 import 'package:unitransit_admin/models/hub_model.dart';
+import 'package:unitransit_admin/models/support_ticket_model.dart';
 
 class FirebaseService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -204,6 +205,79 @@ class FirebaseService {
       'totalDrivers': drivers.docs.length,
       'totalStudents': students.docs.length,
     };
+  }
+
+  // Gender Configuration (RTDB)
+  Future<void> updateGenderConfig(String name, String colorHex) async {
+    await _rtdb.ref('gender_configs').child(name).set({
+      'color': colorHex,
+    });
+  }
+
+  Future<void> deleteGenderConfig(String name) async {
+    await _rtdb.ref('gender_configs').child(name).remove();
+  }
+
+  Stream<Map<String, String>> getGenderConfigs() {
+    return _rtdb.ref('gender_configs').onValue.map((event) {
+      final Map<dynamic, dynamic>? data = event.snapshot.value as Map<dynamic, dynamic>?;
+      if (data == null) return {};
+      
+      final Map<String, String> result = {};
+      data.forEach((key, value) {
+        if (value is Map && value.containsKey('color')) {
+          result[key.toString()] = value['color'].toString();
+        }
+      });
+      return result;
+    });
+  }
+
+  // Support Tickets
+  Stream<List<SupportTicketModel>> getTickets() {
+    return _db
+        .collection('support_tickets')
+        .orderBy('timestamp', descending: true)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs
+          .map((doc) => SupportTicketModel.fromMap(doc.id, doc.data()))
+          .toList();
+    });
+  }
+
+  Future<void> updateTicketStatus(String ticketId, String status, {String? reply}) async {
+    final Map<String, dynamic> updates = {
+      'status': status,
+    };
+    if (reply != null) {
+      updates['adminReply'] = reply;
+    }
+    if (status.toLowerCase() == 'resolved' || status.toLowerCase() == 'closed') {
+      updates['resolvedAt'] = Timestamp.now();
+    }
+    await _db.collection('support_tickets').doc(ticketId).update(updates);
+  }
+
+  // App Settings / About Info
+  Future<void> uploadInitialAppInfo() async {
+    final doc = await _db.collection('app_settings').doc('about').get();
+    if (!doc.exists) {
+      await _db.collection('app_settings').doc('about').set({
+        'vision': "UniTransit is a state-of-the-art solution designed for The Islamia University of Bahawalpur to digitize the bus tracking experience. It leverages real-time GPS data, Firebase synchronization, and smart routing algorithms to ensure students never miss their commute.",
+        'version': "1.2.0 (Stable)",
+        'university': "The Islamia University of Bahawalpur",
+        'appLogoUrl': "", // Add image URL here later from Admin Panel
+        'contributors': [
+          {"role": "Lead Developer", "name": "Noor Mustafa", "subtitle": "Roll No: F22BDOCS1M01160"},
+          {"role": "Supervisor", "name": "Dr. Umar Farooq Shafi", "subtitle": "Department of CS & IT, IUB"},
+        ],
+      });
+    }
+  }
+
+  Future<void> updateAppInfo(Map<String, dynamic> data) async {
+    await _db.collection('app_settings').doc('about').set(data);
   }
 }
 

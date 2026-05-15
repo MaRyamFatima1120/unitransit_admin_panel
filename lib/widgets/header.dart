@@ -121,11 +121,16 @@ class _HeaderState extends State<Header> {
           SizedBox(width: AppResponsiveUtil.isMobile(context) ? 12 : 32),
           
           // Action Icons
-          _buildHeaderAction(Icons.notifications_none_rounded, hasBadge: true),
+          _buildHeaderAction(
+            context, 
+            Icons.notifications_none_rounded, 
+            badgeCount: viewModel.pendingAlerts,
+            onTap: () => viewModel.setSelectedIndex(7), // 7 is Notifications index
+          ),
           
           if (!AppResponsiveUtil.isMobile(context)) ...[
             const SizedBox(width: 16),
-            _buildHeaderAction(Icons.help_outline_rounded),
+            _buildHeaderAction(context, Icons.help_outline_rounded),
             const SizedBox(width: 32),
             // Divider
             Container(
@@ -206,34 +211,43 @@ class _HeaderState extends State<Header> {
     );
   }
 
-  Widget _buildHeaderAction(IconData icon, {bool hasBadge = false}) {
-    return Stack(
-      children: [
-        Container(
-          height: 44,
-          width: 44,
-          decoration: BoxDecoration(
-            color: AppColors.cardWhite,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.borderLight),
+  Widget _buildHeaderAction(BuildContext context, IconData icon, {int badgeCount = 0, VoidCallback? onTap}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Stack(
+        children: [
+          Container(
+            height: 44,
+            width: 44,
+            decoration: BoxDecoration(
+              color: AppColors.cardWhite,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.borderLight),
+            ),
+            child: Icon(icon, color: AppColors.textSecondary, size: 22),
           ),
-          child: Icon(icon, color: AppColors.textSecondary, size: 22),
-        ),
-        if (hasBadge)
-          Positioned(
-            right: 12,
-            top: 12,
-            child: Container(
-              height: 8,
-              width: 8,
-              decoration: BoxDecoration(
-                color: AppColors.accentAmber,
-                shape: BoxShape.circle,
-                border: Border.all(color: AppColors.cardWhite, width: 1.5),
+          if (badgeCount > 0)
+            Positioned(
+              right: 6,
+              top: 6,
+              child: Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: AppColors.error,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppColors.cardWhite, width: 2),
+                ),
+                constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                child: Text(
+                  badgeCount > 9 ? '9+' : '$badgeCount',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                ),
               ),
             ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 }
