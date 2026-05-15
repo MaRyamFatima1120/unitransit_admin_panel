@@ -69,12 +69,13 @@ class StudentsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildTextField(TextEditingController controller, String label, IconData icon, {TextInputType? keyboardType}) {
+  Widget _buildTextField(TextEditingController controller, String label, IconData icon, {TextInputType? keyboardType, TextInputAction action = TextInputAction.next}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: TextFormField(
         controller: controller,
         keyboardType: keyboardType,
+        textInputAction: action,
         decoration: InputDecoration(
           labelText: label,
           prefixIcon: Icon(icon, size: 20, color: AppColors.primaryNavy),

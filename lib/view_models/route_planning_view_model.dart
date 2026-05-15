@@ -3,11 +3,75 @@ import 'package:flutter/material.dart';
 import 'package:unitransit_admin/core/services/firebase_service.dart';
 import 'package:unitransit_admin/models/bus_schedule_model.dart';
 import 'package:unitransit_admin/models/hub_model.dart';
+import 'package:unitransit_admin/models/stop_model.dart';
 
 class RoutePlanningViewModel extends ChangeNotifier {
   final FirebaseService _firebaseService;
 
-  RoutePlanningViewModel(this._firebaseService);
+  RoutePlanningViewModel(this._firebaseService) {
+    // Add listeners for smart parsing
+    latController.addListener(() => _smartParse(latController, lngController));
+    stopLatController.addListener(() => _smartParse(stopLatController, stopLngController));
+  }
+
+  void _smartParse(TextEditingController latCtrl, TextEditingController lngCtrl) {
+    String text = latCtrl.text.trim();
+    if (text.isEmpty) return;
+
+    // 1. Check for Comma Separated (Decimal): "29.37, 71.72"
+    if (text.contains(',')) {
+      final parts = text.split(',');
+      if (parts.length == 2) {
+        final lat = double.tryParse(parts[0].trim());
+        final lng = double.tryParse(parts[1].trim());
+        if (lat != null && lng != null) {
+          latCtrl.text = lat.toStringAsFixed(6);
+          lngCtrl.text = lng.toStringAsFixed(6);
+          notifyListeners();
+          return;
+        }
+      }
+    }
+
+    // 2. Check for Space Separated (Decimal): "29.37 71.72"
+    if (text.contains(' ') && !text.contains('°')) {
+       final parts = text.split(' ');
+       if (parts.length == 2) {
+        final lat = double.tryParse(parts[0].trim());
+        final lng = double.tryParse(parts[1].trim());
+        if (lat != null && lng != null) {
+          latCtrl.text = lat.toStringAsFixed(6);
+          lngCtrl.text = lng.toStringAsFixed(6);
+          notifyListeners();
+          return;
+        }
+      }
+    }
+
+    // 3. Check for DMS Format: "29°23'16.70"N 71°42'11.46"E"
+    final dmsRegex = RegExp(r'(\d+)°(\d+)\x27([\d\.]+)\x22([NSEW])');
+    final matches = dmsRegex.allMatches(text).toList();
+    
+    if (matches.length == 2) {
+      double parseDMS(RegExpMatch m) {
+        double d = double.parse(m.group(1)!);
+        double min = double.parse(m.group(2)!);
+        double s = double.parse(m.group(3)!);
+        String dir = m.group(4)!;
+        
+        double decimal = d + (min / 60) + (s / 3600);
+        if (dir == 'S' || dir == 'W') decimal = -decimal;
+        return decimal;
+      }
+
+      final lat = parseDMS(matches[0]);
+      final lng = parseDMS(matches[1]);
+      
+      latCtrl.text = lat.toStringAsFixed(6);
+      lngCtrl.text = lng.toStringAsFixed(6);
+      notifyListeners();
+    }
+  }
 
   // --- Hubs Manager State ---
   final nameController = TextEditingController();
@@ -177,6 +241,75 @@ class RoutePlanningViewModel extends ChangeNotifier {
     }
   }
 
+  // --- Stop Manager State ---
+  final stopNameController = TextEditingController();
+  final stopLatController = TextEditingController();
+  final stopLngController = TextEditingController();
+  String? _selectedRouteForStop;
+  bool _isStopSaving = false;
+  String? _editingStopId;
+
+  String? get selectedRouteForStop => _selectedRouteForStop;
+  bool get isStopSaving => _isStopSaving;
+  String? get editingStopId => _editingStopId;
+
+  void setSelectedRouteForStop(String? route) {
+    _selectedRouteForStop = route;
+    notifyListeners();
+  }
+
+  void setEditingStop(StopModel? stop) {
+    if (stop != null) {
+      _editingStopId = stop.id;
+      stopNameController.text = stop.name;
+      stopLatController.text = stop.latitude.toString();
+      stopLngController.text = stop.longitude.toString();
+      _selectedRouteForStop = stop.route;
+    } else {
+      _editingStopId = null;
+      stopNameController.clear();
+      stopLatController.clear();
+      stopLngController.clear();
+      _selectedRouteForStop = null;
+    }
+    notifyListeners();
+  }
+
+  Future<void> saveStop() async {
+    if (stopNameController.text.isNotEmpty &&
+        stopLatController.text.isNotEmpty &&
+        stopLngController.text.isNotEmpty &&
+        _selectedRouteForStop != null) {
+      _isStopSaving = true;
+      notifyListeners();
+
+      try {
+        final stop = StopModel(
+          id: _editingStopId ?? DateTime.now().millisecondsSinceEpoch.toString(),
+          name: stopNameController.text.trim(),
+          latitude: double.parse(stopLatController.text),
+          longitude: double.parse(stopLngController.text),
+          route: _selectedRouteForStop!,
+        );
+
+        if (_editingStopId != null) {
+          await _firebaseService.updateStop(stop);
+        } else {
+          await _firebaseService.addStop(stop);
+        }
+        setEditingStop(null);
+      } finally {
+        _isStopSaving = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<void> deleteStop(String id) async {
+    await _firebaseService.deleteStop(id);
+    notifyListeners();
+  }
+
   @override
   void dispose() {
     nameController.dispose();
@@ -184,6 +317,9 @@ class RoutePlanningViewModel extends ChangeNotifier {
     lngController.dispose();
     routeNameController.dispose();
     jsonController.dispose();
+    stopNameController.dispose();
+    stopLatController.dispose();
+    stopLngController.dispose();
     super.dispose();
   }
 }

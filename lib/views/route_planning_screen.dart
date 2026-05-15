@@ -7,6 +7,7 @@ import 'package:unitransit_admin/core/constants/app_colors.dart';
 import 'package:unitransit_admin/core/services/firebase_service.dart';
 import 'package:unitransit_admin/models/bus_schedule_model.dart';
 import 'package:unitransit_admin/models/hub_model.dart';
+import 'package:unitransit_admin/models/stop_model.dart';
 import 'package:unitransit_admin/core/utils/responsive_util.dart';
 import 'package:unitransit_admin/view_models/route_planning_view_model.dart';
 
@@ -23,7 +24,7 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> with SingleTi
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
   }
 
   @override
@@ -51,6 +52,7 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> with SingleTi
               children: const [
                 HubsManagerSection(),
                 RouteDefinitionSection(),
+                StopsManagerSection(),
                 PolylineUploaderSection(),
               ],
             ),
@@ -119,6 +121,7 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> with SingleTi
         tabs: const [
           Tab(text: 'Hubs'),
           Tab(text: 'Routes'),
+          Tab(text: 'Stops'),
           Tab(text: 'Paths'),
         ],
       ),
@@ -324,9 +327,9 @@ class RouteDefinitionSection extends StatelessWidget {
                 if (isDesktop) const SizedBox(width: 24),
                 if (!isDesktop) const SizedBox(height: 24),
                 if (isDesktop)
-                  Expanded(child: _buildRouteList(viewModel))
+                  Expanded(child: _buildRouteList(viewModel, firebaseService))
                 else
-                  _buildRouteList(viewModel),
+                  _buildRouteList(viewModel, firebaseService),
               ],
             ),
           ),
@@ -373,7 +376,7 @@ class RouteDefinitionSection extends StatelessWidget {
     );
   }
 
-  Widget _buildRouteList(RoutePlanningViewModel viewModel) {
+  Widget _buildRouteList(RoutePlanningViewModel viewModel, FirebaseService firebaseService) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -388,22 +391,21 @@ class RouteDefinitionSection extends StatelessWidget {
             child: Text('Active Routes', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           ),
           const Divider(height: 1),
-          StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance.collection('schedules').snapshots(),
+          StreamBuilder<List<BusSchedule>>(
+            stream: firebaseService.getBusSchedules(),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) return const Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator()));
-              final docs = snapshot.data?.docs ?? [];
-              if (docs.isEmpty) return _buildEmptyState('No routes defined.');
+              final schedules = snapshot.data ?? [];
+              if (schedules.isEmpty) return _buildEmptyState('No routes defined.');
 
               return ListView.separated(
                 padding: const EdgeInsets.all(16),
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                itemCount: docs.length,
+                itemCount: schedules.length,
                 separatorBuilder: (_, __) => const SizedBox(height: 12),
                 itemBuilder: (context, index) {
-                  final data = docs[index].data() as Map<String, dynamic>;
-                  final route = BusSchedule.fromMap(docs[index].id, data);
+                  final route = schedules[index];
                   return _buildRouteCard(context, route, viewModel);
                 },
               );
@@ -470,7 +472,7 @@ class PolylineUploaderSection extends StatelessWidget {
           children: [
             SizedBox(
               width: isDesktop ? 380 : double.infinity,
-              child: _buildPolylineForm(viewModel),
+              child: _buildPolylineForm(viewModel, firebaseService),
             ),
             if (isDesktop) const SizedBox(width: 24),
             if (!isDesktop) const SizedBox(height: 24),
@@ -484,7 +486,7 @@ class PolylineUploaderSection extends StatelessWidget {
     );
   }
 
-  Widget _buildPolylineForm(RoutePlanningViewModel viewModel) {
+  Widget _buildPolylineForm(RoutePlanningViewModel viewModel, FirebaseService firebaseService) {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -498,13 +500,13 @@ class PolylineUploaderSection extends StatelessWidget {
           const Text('Path Sync', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 24),
           _buildFieldLabel('Select Route'),
-          StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance.collection('schedules').snapshots(),
+          StreamBuilder<List<BusSchedule>>(
+            stream: firebaseService.getBusSchedules(),
             builder: (context, snapshot) {
-              final routes = snapshot.data?.docs ?? [];
+              final routes = snapshot.data ?? [];
               return _buildModernDropdown(
                 viewModel.selectedRouteForPolyline, 
-                routes.map((d) => (d.data() as Map)['route'].toString()).toList(), 
+                routes.map((d) => d.route).toList(), 
                 'Route', Icons.alt_route_rounded, AppColors.primaryNavy, (v) => viewModel.setSelectedRouteForPolyline(v)
               );
             },
@@ -557,10 +559,10 @@ class PolylineUploaderSection extends StatelessWidget {
             stream: firebaseService.getPolylinesStatus(),
             builder: (context, polylineSnapshot) {
               final polylines = polylineSnapshot.data ?? {};
-              return StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance.collection('schedules').snapshots(),
+              return StreamBuilder<List<BusSchedule>>(
+                stream: firebaseService.getBusSchedules(),
                 builder: (context, routeSnapshot) {
-                  final routes = routeSnapshot.data?.docs ?? [];
+                  final routes = routeSnapshot.data ?? [];
                   if (routes.isEmpty) return _buildEmptyState('No routes.');
 
                   return ListView.separated(
@@ -570,8 +572,8 @@ class PolylineUploaderSection extends StatelessWidget {
                     itemCount: routes.length,
                     separatorBuilder: (_, __) => const SizedBox(height: 8),
                     itemBuilder: (context, index) {
-                      final data = routes[index].data() as Map<String, dynamic>;
-                      final routeName = data['route'] ?? 'Unknown';
+                      final route = routes[index];
+                      final routeName = route.route;
                       final hasPolyline = polylines.containsKey(routeName);
 
                       return Container(
@@ -601,6 +603,206 @@ class PolylineUploaderSection extends StatelessWidget {
   }
 }
 
+// --- Section D: Stops Manager ---
+class StopsManagerSection extends StatelessWidget {
+  const StopsManagerSection({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final viewModel = context.watch<RoutePlanningViewModel>();
+    final firebaseService = context.read<FirebaseService>();
+    final isDesktop = AppResponsiveUtil.isDesktop(context);
+
+    return SingleChildScrollView(
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 24),
+        child: Flex(
+          direction: isDesktop ? Axis.horizontal : Axis.vertical,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: isDesktop ? 380 : double.infinity,
+              child: _buildStopForm(viewModel, firebaseService),
+            ),
+            if (isDesktop) const SizedBox(width: 24),
+            if (!isDesktop) const SizedBox(height: 24),
+            if (isDesktop)
+              Expanded(child: _buildStopList(firebaseService, viewModel))
+            else
+              _buildStopList(firebaseService, viewModel),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStopForm(RoutePlanningViewModel viewModel, FirebaseService firebaseService) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.borderLight),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            viewModel.editingStopId != null ? 'Edit Stop' : 'Add New Stop',
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 24),
+          _buildFieldLabel('Stop Name'),
+          _buildModernField(viewModel.stopNameController, 'e.g. Near Library', Icons.location_city_rounded),
+          const SizedBox(height: 16),
+          _buildFieldLabel('Select Route'),
+          StreamBuilder<List<BusSchedule>>(
+            stream: firebaseService.getBusSchedules(),
+            builder: (context, snapshot) {
+              final routes = snapshot.data ?? [];
+              return _buildModernDropdown(
+                viewModel.selectedRouteForStop, 
+                routes.map((d) => d.route).toList(), 
+                'Route', Icons.alt_route_rounded, AppColors.primaryNavy, (v) => viewModel.setSelectedRouteForStop(v)
+              );
+            },
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildFieldLabel('Latitude'),
+                    _buildModernField(viewModel.stopLatController, '0.00', Icons.gps_fixed_rounded, isNumber: true),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildFieldLabel('Longitude'),
+                    _buildModernField(viewModel.stopLngController, '0.00', Icons.gps_fixed_rounded, isNumber: true),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 32),
+          Row(
+            children: [
+              if (viewModel.editingStopId != null)
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: OutlinedButton(
+                      onPressed: () => viewModel.setEditingStop(null),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: const Text('Cancel'),
+                    ),
+                  ),
+                ),
+              Expanded(
+                flex: 2,
+                child: ElevatedButton(
+                  onPressed: viewModel.isStopSaving ? null : () => viewModel.saveStop(),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primaryNavy,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: viewModel.isStopSaving
+                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                      : Text(viewModel.editingStopId != null ? 'Update Stop' : 'Save Stop', style: const TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStopList(FirebaseService firebaseService, RoutePlanningViewModel viewModel) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.borderLight),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.all(24),
+            child: Text('All Stops', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          ),
+          const Divider(height: 1),
+          StreamBuilder<List<StopModel>>(
+            stream: firebaseService.getStops(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) return const Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator()));
+              final stops = snapshot.data ?? [];
+              if (stops.isEmpty) return _buildEmptyState('No stops defined.');
+
+              return ListView.separated(
+                padding: const EdgeInsets.all(16),
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: stops.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                itemBuilder: (context, index) {
+                  final stop = stops[index];
+                  return Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppColors.backgroundLight.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AppColors.borderLight),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
+                          child: const Icon(Icons.radio_button_checked_rounded, color: Colors.grey, size: 18),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(stop.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                              Text('Route: ${stop.route}', style: const TextStyle(color: AppColors.primaryNavy, fontSize: 11, fontWeight: FontWeight.w600)),
+                              Text('${stop.latitude}, ${stop.longitude}', style: const TextStyle(color: AppColors.textSecondary, fontSize: 10)),
+                            ],
+                          ),
+                        ),
+                        _buildActionMenu(context, 
+                          onEdit: () => viewModel.setEditingStop(stop),
+                          onDelete: () => viewModel.deleteStop(stop.id),
+                          deleteMsg: 'Delete this stop?'
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 // --- SHARED HELPER WIDGETS ---
 
 Widget _buildFieldLabel(String label) {
@@ -610,10 +812,11 @@ Widget _buildFieldLabel(String label) {
   );
 }
 
-Widget _buildModernField(TextEditingController controller, String hint, IconData icon, {bool isNumber = false}) {
+Widget _buildModernField(TextEditingController controller, String hint, IconData icon, {bool isNumber = false, TextInputAction action = TextInputAction.next}) {
   return TextField(
     controller: controller,
     keyboardType: isNumber ? const TextInputType.numberWithOptions(decimal: true) : TextInputType.text,
+    textInputAction: action,
     style: const TextStyle(fontSize: 13),
     decoration: InputDecoration(
       hintText: hint,

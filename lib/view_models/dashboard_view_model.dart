@@ -38,12 +38,15 @@ class DashboardViewModel extends ChangeNotifier {
   // Real data stats
   int totalStudents = 0;
   int totalDrivers = 0;
+  int totalAdmins = 0; // Added for Super Admin dashboard
   int activeTrips = 42;
   int pendingAlerts = 0;
   double totalRevenue = 12450.0;
 
+  StreamSubscription? _statsSubscription;
+
   DashboardViewModel() {
-    refreshData();
+    _listenToStats();
     _listenToNewTickets();
   }
 
@@ -67,24 +70,29 @@ class DashboardViewModel extends ChangeNotifier {
     });
   }
 
-  Future<void> refreshData() async {
-    _isLoading = true;
-    notifyListeners();
-
-    try {
-      final stats = await _firebaseService.getStats();
+  void _listenToStats() {
+    _statsSubscription?.cancel();
+    _statsSubscription = _firebaseService.getRealTimeStats().listen((stats) {
       totalDrivers = stats['totalDrivers'] ?? 0;
       totalStudents = stats['totalStudents'] ?? 0;
-    } catch (e) {
-      debugPrint('Error fetching stats: $e');
-    }
+      notifyListeners();
+    });
+    
+    // Also fetch admins count once or make it a stream if needed
+    _firebaseService.getAdminsCount().then((count) {
+      totalAdmins = count;
+      notifyListeners();
+    });
+  }
 
-    _isLoading = false;
-    notifyListeners();
+  Future<void> refreshData() async {
+    _listenToStats();
+    _listenToNewTickets();
   }
 
   @override
   void dispose() {
+    _statsSubscription?.cancel();
     _ticketSubscription?.cancel();
     super.dispose();
   }

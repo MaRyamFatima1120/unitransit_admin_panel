@@ -1,0 +1,441 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:unitransit_admin/core/constants/app_colors.dart';
+import 'package:unitransit_admin/core/services/firebase_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:unitransit_admin/core/utils/responsive_util.dart';
+import 'package:intl/intl.dart';
+
+class AdminsManagementScreen extends StatefulWidget {
+  const AdminsManagementScreen({super.key});
+
+  @override
+  State<AdminsManagementScreen> createState() => _AdminsManagementScreenState();
+}
+
+class _AdminsManagementScreenState extends State<AdminsManagementScreen> {
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+  bool _isCreating = false;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.all(AppResponsiveUtil.isMobile(context) ? 16 : 32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildHeader(context),
+          const SizedBox(height: 32),
+          _buildStatsRow(),
+          const SizedBox(height: 32),
+          _buildSearchAndFilters(),
+          const SizedBox(height: 24),
+          Expanded(
+            child: _buildAdminsList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeader(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Admins Management',
+              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textDark,
+                    fontSize: AppResponsiveUtil.isMobile(context) ? 24 : null,
+                  ),
+            ),
+            const SizedBox(height: 4),
+            const Text('Manage administrative access, roles and security.',
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+          ],
+        ),
+        ElevatedButton.icon(
+          onPressed: () => _showAddAdminDialog(context),
+          icon: const Icon(Icons.person_add_rounded, size: 18),
+          label: const Text('Add New Admin'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.primaryNavy,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            elevation: 0,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatsRow() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance.collection('users').where('role', isEqualTo: 'Admin').snapshots(),
+      builder: (context, snapshot) {
+        int total = snapshot.hasData ? snapshot.data!.docs.length : 0;
+        return Row(
+          children: [
+            _buildStatItem('Total Admins', total.toString(), Icons.admin_panel_settings_rounded, Colors.blue),
+            const SizedBox(width: 24),
+            _buildStatItem('Active Sessions', total.toString(), Icons.online_prediction_rounded, Colors.green),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildStatItem(String label, String value, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      decoration: BoxDecoration(
+        color: AppColors.cardWhite,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.borderLight),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
+            child: Icon(icon, color: color, size: 20),
+          ),
+          const SizedBox(width: 16),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.textDark)),
+              Text(label, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSearchAndFilters() {
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: AppColors.cardWhite,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.borderLight),
+      ),
+      child: Row(
+        children: [
+          const SizedBox(width: 12),
+          const Icon(Icons.search_rounded, color: AppColors.textSecondary, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: TextField(
+              controller: _searchController,
+              onChanged: (v) => setState(() => _searchQuery = v.toLowerCase()),
+              decoration: const InputDecoration(
+                hintText: 'Search by name or email...',
+                border: InputBorder.none,
+                hintStyle: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAdminsList() {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.cardWhite,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.borderLight),
+      ),
+      child: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance.collection('users').where('role', isEqualTo: 'Admin').snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            return _buildEmptyState();
+          }
+
+          final admins = snapshot.data!.docs.where((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            final name = (data['name'] ?? '').toString().toLowerCase();
+            final email = (data['email'] ?? '').toString().toLowerCase();
+            return name.contains(_searchQuery) || email.contains(_searchQuery);
+          }).toList();
+
+          if (admins.isEmpty) return _buildEmptyState(isSearch: true);
+
+          return ListView.separated(
+            padding: const EdgeInsets.all(16),
+            itemCount: admins.length,
+            separatorBuilder: (context, index) => const Divider(height: 1, indent: 70),
+            itemBuilder: (context, index) {
+              final admin = admins[index].data() as Map<String, dynamic>;
+              final adminId = admins[index].id;
+              final name = admin['name'] ?? 'Unknown';
+              final email = admin['email'] ?? 'No Email';
+              final createdAt = admin['createdAt'] as Timestamp?;
+              final dateStr = createdAt != null ? DateFormat('MMM dd, yyyy').format(createdAt.toDate()) : 'Recently';
+
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  leading: Stack(
+                    children: [
+                      CircleAvatar(
+                        radius: 24,
+                        backgroundColor: AppColors.primaryNavy.withOpacity(0.1),
+                        child: Text(
+                          name[0].toUpperCase(),
+                          style: const TextStyle(color: AppColors.primaryNavy, fontWeight: FontWeight.bold, fontSize: 18),
+                        ),
+                      ),
+                      Positioned(
+                        right: 0, bottom: 0,
+                        child: Container(
+                          width: 12, height: 12,
+                          decoration: BoxDecoration(color: Colors.green, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2)),
+                        ),
+                      ),
+                    ],
+                  ),
+                  title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.textDark)),
+                  subtitle: Row(
+                    children: [
+                      Text(email, style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                      const SizedBox(width: 12),
+                      const Icon(Icons.circle, size: 4, color: AppColors.textSecondary),
+                      const SizedBox(width: 12),
+                      Text('Added $dateStr', style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                    ],
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(color: AppColors.primaryNavy.withOpacity(0.05), borderRadius: BorderRadius.circular(20)),
+                        child: const Text('ADMIN', style: TextStyle(color: AppColors.primaryNavy, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        icon: const Icon(Icons.lock_reset_rounded, color: AppColors.accentAmber, size: 22),
+                        onPressed: () => _resetPassword(context, email),
+                        tooltip: 'Send Password Reset Email',
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 22),
+                        onPressed: () => _confirmDelete(context, adminId, name),
+                        tooltip: 'Remove Access',
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  void _resetPassword(BuildContext context, String email) async {
+    try {
+      await FirebaseFirestore.instance.app.options; // Just to ensure firebase is ready
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Password reset email sent to $email'), backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Widget _buildEmptyState({bool isSearch = false}) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(color: AppColors.backgroundLight, shape: BoxShape.circle),
+            child: Icon(isSearch ? Icons.search_off_rounded : Icons.admin_panel_settings_outlined, size: 64, color: AppColors.textSecondary.withOpacity(0.5)),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            isSearch ? 'No matching admins found.' : 'No other admins registered yet.',
+            style: const TextStyle(color: AppColors.textDark, fontWeight: FontWeight.bold, fontSize: 18),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            isSearch ? 'Try a different search term.' : 'Click "Add New Admin" to grant someone access.',
+            style: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAddAdminDialog(BuildContext context) {
+    final nameController = TextEditingController();
+    final emailController = TextEditingController();
+    final passwordController = TextEditingController();
+
+    showDialog(
+      context: context,
+      barrierDismissible: !_isCreating,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(color: AppColors.primaryNavy.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+                  child: const Icon(Icons.person_add_rounded, color: AppColors.primaryNavy, size: 20),
+                ),
+                const SizedBox(width: 16),
+                const Text('Grant Admin Access'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'A new administrative account will be created and registered in the system.',
+                  style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                ),
+                const SizedBox(height: 24),
+                _buildDialogField(nameController, 'Full Name', Icons.person_outline_rounded, TextInputAction.next),
+                const SizedBox(height: 16),
+                _buildDialogField(emailController, 'Email Address', Icons.email_outlined, TextInputAction.next, isEmail: true),
+                const SizedBox(height: 16),
+                _buildDialogField(passwordController, 'Temporary Password', Icons.lock_outline_rounded, TextInputAction.done, isPassword: true),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: _isCreating ? null : () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: _isCreating ? null : () async {
+                  if (nameController.text.isEmpty || emailController.text.isEmpty || passwordController.text.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please fill all fields')));
+                    return;
+                  }
+                  
+                  setDialogState(() => _isCreating = true);
+                  try {
+                    await _createAdmin(context, nameController.text, emailController.text, passwordController.text);
+                    if (context.mounted) Navigator.pop(context);
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+                    }
+                  } finally {
+                    setDialogState(() => _isCreating = false);
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryNavy,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                child: _isCreating 
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                  : const Text('Create Account'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildDialogField(TextEditingController controller, String label, IconData icon, TextInputAction action, {bool isEmail = false, bool isPassword = false}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label.toUpperCase(), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1, color: AppColors.textSecondary)),
+        const SizedBox(height: 8),
+        TextField(
+          controller: controller,
+          textInputAction: action,
+          obscureText: isPassword,
+          keyboardType: isEmail ? TextInputType.emailAddress : TextInputType.text,
+          decoration: InputDecoration(
+            prefixIcon: Icon(icon, size: 18),
+            hintText: 'Enter $label',
+            filled: true,
+            fillColor: AppColors.backgroundLight.withOpacity(0.5),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _createAdmin(BuildContext context, String name, String email, String password) async {
+    final firebaseService = FirebaseService();
+    
+    // 1. Create in Firebase Auth
+    final uid = await firebaseService.createUserAuth(email, password);
+    
+    // 2. Save Metadata to Firestore using the same UID
+    await FirebaseFirestore.instance.collection('users').doc(uid).set({
+      'name': name,
+      'email': email,
+      'role': 'Admin',
+      'uid': uid,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  void _confirmDelete(BuildContext context, String id, String name) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Revoke Access?'),
+        content: Text('Are you sure you want to remove $name? They will be immediately blocked from accessing the Admin Panel.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () async {
+              await FirebaseFirestore.instance.collection('users').doc(id).delete();
+              if (context.mounted) Navigator.pop(context);
+            },
+            child: const Text('Confirm Remove', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+}

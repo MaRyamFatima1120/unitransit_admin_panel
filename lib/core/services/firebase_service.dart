@@ -8,15 +8,17 @@ import 'package:unitransit_admin/models/driver_model.dart';
 import 'package:unitransit_admin/models/student_model.dart';
 import 'package:unitransit_admin/models/bus_schedule_model.dart';
 import 'package:unitransit_admin/models/hub_model.dart';
+import 'package:unitransit_admin/models/stop_model.dart';
 import 'package:unitransit_admin/models/support_ticket_model.dart';
+import 'package:unitransit_admin/models/faq_model.dart';
 
 class FirebaseService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final FirebaseStorage _storage = FirebaseStorage.instance;
   final FirebaseDatabase _rtdb = FirebaseDatabase.instance;
 
-  // Create Driver Authentication without logging out the admin
-  Future<void> createDriverAuth(String email, String password) async {
+  // Create User Authentication without logging out the current admin
+  Future<String> createUserAuth(String email, String password) async {
     try {
       // Use a secondary app instance to avoid logging out the current admin user
       FirebaseApp secondaryApp;
@@ -29,13 +31,16 @@ class FirebaseService {
         );
       }
       
-      await FirebaseAuth.instanceFor(app: secondaryApp).createUserWithEmailAndPassword(
+      final credential = await FirebaseAuth.instanceFor(app: secondaryApp).createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
       
+      final uid = credential.user!.uid;
+      
       // Delete the secondary app instance to clean up
       await secondaryApp.delete();
+      return uid;
     } catch (e) {
       throw 'Authentication creation failed: $e';
     }
@@ -75,6 +80,11 @@ class FirebaseService {
   Future<void> deleteDriver(String id) async {
     // Note: In a real app, also delete images from storage
     await _db.collection('drivers').doc(id).delete();
+    await _db.collection('users').doc(id).delete();
+  }
+
+  Future<void> resetDriverPassword(String email) async {
+    await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
   }
 
   // Students
@@ -97,6 +107,29 @@ class FirebaseService {
   }
 
   // Routes & Schedules
+  Stream<List<BusSchedule>> getBusSchedules() {
+    return _db.collection('schedules').snapshots().map((snapshot) {
+      final List<BusSchedule> schedules = snapshot.docs.map((doc) => BusSchedule.fromMap(doc.id, doc.data())).toList();
+      
+      // Check if the default route exists in the list
+      bool defaultExists = schedules.any((s) => s.route == "Abbasia ➔ Baghdad");
+      
+      if (!defaultExists) {
+        // Add default route for UI consistency with student app
+        schedules.insert(0, BusSchedule(
+          id: "default_route_1",
+          route: "Abbasia ➔ Baghdad",
+          from: "Abbasia Campus",
+          to: "Baghdad Campus",
+          stops: ["Abbasia Campus", "Baghdad Campus"],
+          type: "Combined",
+        ));
+      }
+      
+      return schedules;
+    });
+  }
+
   Future<void> addBusSchedule(BusSchedule schedule) async {
     // 1. Save to Firestore (Detailed Info)
     await _db.collection('schedules').doc(schedule.id).set(schedule.toMap());
@@ -168,6 +201,27 @@ class FirebaseService {
     await _rtdb.ref('custom_polylines').child(routeName).set(coordinates);
   }
 
+  // Stop Management (RTDB)
+  Future<void> addStop(StopModel stop) async {
+    await _rtdb.ref('stops').child(stop.id).set(stop.toMap());
+  }
+
+  Future<void> updateStop(StopModel stop) async {
+    await _rtdb.ref('stops').child(stop.id).update(stop.toMap());
+  }
+
+  Future<void> deleteStop(String id) async {
+    await _rtdb.ref('stops').child(id).remove();
+  }
+
+  Stream<List<StopModel>> getStops() {
+    return _rtdb.ref('stops').onValue.map((event) {
+      final Map<dynamic, dynamic>? data = event.snapshot.value as Map<dynamic, dynamic>?;
+      if (data == null) return [];
+      return data.entries.map((e) => StopModel.fromMap(e.key.toString(), e.value as Map<dynamic, dynamic>)).toList();
+    });
+  }
+
   Future<void> updateBusSchedule(String id, BusSchedule schedule, String oldRouteName) async {
     // 1. Update Firestore
     await _db.collection('schedules').doc(id).update(schedule.toMap());
@@ -197,14 +251,37 @@ class FirebaseService {
     });
   }
 
-  // Dashboard Stats
-  Future<Map<String, int>> getStats() async {
-    final drivers = await _db.collection('drivers').get();
-    final students = await _db.collection('students').get();
-    return {
-      'totalDrivers': drivers.docs.length,
-      'totalStudents': students.docs.length,
-    };
+  // Real-time Stats Stream
+  Stream<Map<String, int>> getStatsStream() {
+    return _db.collection('drivers').snapshots().asyncMap((driversSnapshot) async {
+      final studentsSnapshot = await _db.collection('students').get(); // Simplified for now
+      return {
+        'totalDrivers': driversSnapshot.docs.length,
+        'totalStudents': studentsSnapshot.docs.length,
+      };
+    });
+  }
+  
+  // Better version: combine two streams
+  Stream<Map<String, int>> getRealTimeStats() {
+    final driversStream = _db.collection('drivers').snapshots();
+    final studentsStream = _db.collection('students').snapshots();
+    
+    // Manual combination
+    return driversStream.map((drivers) => {
+      'drivers': drivers.docs.length
+    }).asyncMap((data) async {
+      final students = await _db.collection('students').get();
+      return {
+        'totalDrivers': data['drivers']!,
+        'totalStudents': students.docs.length,
+      };
+    });
+  }
+
+  Future<int> getAdminsCount() async {
+    final snapshot = await _db.collection('users').where('role', isEqualTo: 'Admin').get();
+    return snapshot.docs.length;
   }
 
   // Gender Configuration (RTDB)
@@ -274,6 +351,25 @@ class FirebaseService {
         ],
       });
     }
+  }
+
+  // FAQs
+  Stream<List<FaqModel>> getFaqs() {
+    return _db.collection('faqs').orderBy('order').snapshots().map((snapshot) {
+      return snapshot.docs.map((doc) => FaqModel.fromMap(doc.id, doc.data())).toList();
+    });
+  }
+
+  Future<void> addFaq(FaqModel faq) async {
+    await _db.collection('faqs').add(faq.toMap());
+  }
+
+  Future<void> updateFaq(FaqModel faq) async {
+    await _db.collection('faqs').doc(faq.id).update(faq.toMap());
+  }
+
+  Future<void> deleteFaq(String id) async {
+    await _db.collection('faqs').doc(id).delete();
   }
 
   Future<void> updateAppInfo(Map<String, dynamic> data) async {

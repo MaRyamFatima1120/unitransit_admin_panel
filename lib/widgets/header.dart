@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 import 'package:unitransit_admin/core/constants/app_colors.dart';
 import 'package:unitransit_admin/core/utils/responsive_util.dart';
 import 'package:unitransit_admin/view_models/dashboard_view_model.dart';
+import 'package:unitransit_admin/view_models/login_view_model.dart';
+import 'package:unitransit_admin/views/faq_management_screen.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class Header extends StatefulWidget {
   const Header({super.key});
@@ -13,200 +15,244 @@ class Header extends StatefulWidget {
 }
 
 class _HeaderState extends State<Header> {
-  late TextEditingController _searchController;
-  final User? user = FirebaseAuth.instance.currentUser;
-
-  @override
-  void initState() {
-    super.initState();
-    final viewModel = context.read<DashboardViewModel>();
-    _searchController = TextEditingController(text: viewModel.searchQuery);
-  }
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  String _getUserName() {
-    if (user == null) return 'Guest Admin';
-    if (user!.displayName != null && user!.displayName!.isNotEmpty) {
-      return user!.displayName!;
-    }
-    // Fallback: use email part before @
-    if (user!.email != null) {
-      return user!.email!.split('@')[0].toUpperCase();
-    }
-    return 'Admin';
-  }
-
-  String _getUserInitials() {
-    String name = _getUserName();
-    List<String> parts = name.split(' ');
-    if (parts.length > 1) {
-      return (parts[0][0] + parts[1][0]).toUpperCase();
-    }
-    return name.substring(0, name.length > 1 ? 2 : 1).toUpperCase();
-  }
-
   @override
   Widget build(BuildContext context) {
     final viewModel = context.watch<DashboardViewModel>();
-    final userName = _getUserName();
-    
+    final isSuperAdmin = context.read<LoginViewModel>().isSuperAdmin;
+    final userName = isSuperAdmin ? 'Super Admin' : 'Admin';
+
     return Container(
-      height: 90,
+      height: 80,
       padding: const EdgeInsets.symmetric(horizontal: 32),
-      decoration: const BoxDecoration(
-        color: AppColors.cardWhite,
-        border: Border(bottom: BorderSide(color: AppColors.borderLight)),
+      decoration: BoxDecoration(
+        color: AppColors.backgroundLight,
+        border: const Border(bottom: BorderSide(color: AppColors.borderLight)),
       ),
       child: Row(
         children: [
-          // Menu Button for Mobile/Tablet
           if (!AppResponsiveUtil.isDesktop(context))
             IconButton(
               onPressed: () => Scaffold.of(context).openDrawer(),
               icon: const Icon(Icons.menu_rounded, color: AppColors.textDark),
             ),
-          if (!AppResponsiveUtil.isDesktop(context)) const SizedBox(width: 16),
-
-          // Search Bar
-          Expanded(
-            child: Container(
-              height: 40,
-              constraints: const BoxConstraints(maxWidth: 500),
-              decoration: BoxDecoration(
-                color: AppColors.backgroundLight,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.borderLight),
-              ),
-              child: TextField(
-                controller: _searchController,
-                onChanged: (v) => viewModel.updateSearchQuery(v),
-                style: const TextStyle(color: AppColors.textDark, fontSize: 13),
-                decoration: InputDecoration(
-                  hintText: 'Search anything...',
-                  hintStyle: TextStyle(color: AppColors.textSecondary.withValues(alpha: 0.5), fontSize: 13),
-                  prefixIcon: Icon(Icons.search_rounded, color: AppColors.textSecondary.withValues(alpha: 0.5), size: 18),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                  suffixIcon: _searchController.text.isNotEmpty 
-                    ? IconButton(
-                        icon: const Icon(Icons.clear_rounded, size: 16),
-                        onPressed: () {
-                          _searchController.clear();
-                          viewModel.updateSearchQuery('');
-                        },
-                      )
-                    : (!AppResponsiveUtil.isMobile(context) ? Container(
-                    margin: const EdgeInsets.all(6),
-                    padding: const EdgeInsets.symmetric(horizontal: 6),
-                    decoration: BoxDecoration(
-                      color: AppColors.cardWhite,
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: AppColors.borderLight),
-                    ),
-                    child: const Center(
-                      widthFactor: 1,
-                      child: Text('⌘ K', style: TextStyle(color: AppColors.textSecondary, fontSize: 10, fontWeight: FontWeight.bold)),
-                    ),
-                  ) : null),
-                ),
-              ),
-            ),
-          ),
           
-          SizedBox(width: AppResponsiveUtil.isMobile(context) ? 12 : 32),
+          const Spacer(),
           
-          // Action Icons
           _buildHeaderAction(
             context, 
             Icons.notifications_none_rounded, 
             badgeCount: viewModel.pendingAlerts,
-            onTap: () => viewModel.setSelectedIndex(7), // 7 is Notifications index
+            onTap: () => viewModel.setSelectedIndex(8), // Notifications Index
           ),
           
           if (!AppResponsiveUtil.isMobile(context)) ...[
             const SizedBox(width: 16),
-            _buildHeaderAction(context, Icons.help_outline_rounded),
-            const SizedBox(width: 32),
-            // Divider
-            Container(
-              height: 40,
-              width: 1,
-              color: AppColors.borderLight,
+            _buildHeaderAction(
+              context, 
+              Icons.help_outline_rounded, 
+              onTap: () => _showFaqPopover(context)
             ),
+            const SizedBox(width: 32),
+            Container(height: 40, width: 1, color: AppColors.borderLight),
           ],
           
-          SizedBox(width: AppResponsiveUtil.isMobile(context) ? 12 : 32),
+          const SizedBox(width: 32),
           
-          // Profile Section
-          InkWell(
-            onTap: () {},
-            borderRadius: BorderRadius.circular(16),
-            child: Padding(
-              padding: const EdgeInsets.all(4.0),
-              child: Row(
-                children: [
-                  if (!AppResponsiveUtil.isMobile(context) && !AppResponsiveUtil.isTablet(context))
-                    Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.end,
+          // User Profile Info
+          Row(
+            children: [
+              if (!AppResponsiveUtil.isMobile(context) && !AppResponsiveUtil.isTablet(context))
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Row(
                       children: [
-                        Text(
-                          userName,
-                          style: const TextStyle(
-                            color: AppColors.textDark,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
+                        if (isSuperAdmin)
+                          Container(
+                            margin: const EdgeInsets.only(right: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(colors: [Colors.amber, Colors.orange]),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text(
+                              'MASTER',
+                              style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w900),
+                            ),
                           ),
-                        ),
-                        const Text(
-                          'System Administrator',
-                          style: TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 12,
-                          ),
-                        ),
+                        Text(userName, style: const TextStyle(color: AppColors.textDark, fontWeight: FontWeight.bold, fontSize: 14)),
                       ],
                     ),
-                  if (!AppResponsiveUtil.isMobile(context) && !AppResponsiveUtil.isTablet(context)) const SizedBox(width: 16),
-                  Stack(
-                    children: [
-                      Container(
-                        height: AppResponsiveUtil.isMobile(context) ? 36 : 48,
-                        width: AppResponsiveUtil.isMobile(context) ? 36 : 48,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(color: AppColors.accentAmber.withValues(alpha: 0.5), width: 2),
-                          image: DecorationImage(
-                            image: NetworkImage('https://ui-avatars.com/api/?name=${userName.replaceAll(' ', '+')}&background=FFD600&color=2A367E'),
-                            fit: BoxFit.cover,
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        right: 2,
-                        bottom: 2,
-                        child: Container(
-                          height: 10,
-                          width: 10,
-                          decoration: BoxDecoration(
-                            color: Colors.green,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: AppColors.cardWhite, width: 2),
-                          ),
-                        ),
-                      ),
-                    ],
+                    const Text('Admin Dashboard', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                  ],
+                ),
+              const SizedBox(width: 16),
+              Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppColors.primaryNavy.withOpacity(0.2), width: 2),
+                ),
+                child: CircleAvatar(
+                  radius: 20,
+                  backgroundColor: AppColors.primaryNavy.withOpacity(0.1),
+                  child: Text(
+                    userName[0], 
+                    style: const TextStyle(color: AppColors.primaryNavy, fontWeight: FontWeight.bold)
                   ),
-                ],
+                ),
               ),
-            ),
+            ],
           ),
         ],
+      ),
+    );
+  }
+
+  void _showFaqPopover(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.transparent,
+        contentPadding: EdgeInsets.zero,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
+        content: Container(
+          width: 500,
+          decoration: BoxDecoration(
+            color: AppColors.cardWhite,
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 20, offset: const Offset(0, 10)),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Popover Header
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: AppColors.primaryNavy,
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle),
+                      child: const Icon(Icons.quiz_rounded, color: Colors.white, size: 20),
+                    ),
+                    const SizedBox(width: 16),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Help & FAQs', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+                          Text('Quick guide and support', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                        ],
+                      ),
+                    ),
+                    if (context.read<LoginViewModel>().isSuperAdmin)
+                      IconButton(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _showFaqManagementDialog(context);
+                        },
+                        icon: const Icon(Icons.edit_note_rounded, color: Colors.white),
+                        tooltip: 'Manage FAQs',
+                      ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close_rounded, color: Colors.white),
+                    ),
+                  ],
+                ),
+              ),
+              
+              // FAQ Content
+              Flexible(
+                child: StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance.collection('faqs').orderBy('order').snapshots(),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator()));
+                    }
+                    
+                    if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                      return const Padding(
+                        padding: EdgeInsets.all(40),
+                        child: Column(
+                          children: [
+                            Icon(Icons.help_center_outlined, size: 48, color: AppColors.textSecondary),
+                            SizedBox(height: 16),
+                            Text('No FAQs available yet.', style: TextStyle(color: AppColors.textSecondary)),
+                          ],
+                        ),
+                      );
+                    }
+
+                    final faqs = snapshot.data!.docs;
+
+                    return ListView.separated(
+                      shrinkWrap: true,
+                      padding: const EdgeInsets.all(24),
+                      itemCount: faqs.length,
+                      separatorBuilder: (context, index) => const Divider(height: 32),
+                      itemBuilder: (context, index) {
+                        final faq = faqs[index].data() as Map<String, dynamic>;
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(faq['question'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.textDark)),
+                            const SizedBox(height: 8),
+                            Text(faq['answer'] ?? '', style: const TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.5)),
+                          ],
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+
+              // Footer
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: AppColors.backgroundLight,
+                  borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24)),
+                  border: const Border(top: BorderSide(color: AppColors.borderLight)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text('Still need help?', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                    TextButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        context.read<DashboardViewModel>().setSelectedIndex(9); // Navigate to Support
+                      },
+                      child: const Text('Contact Support'),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showFaqManagementDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: const SizedBox(
+          width: 800,
+          height: 600,
+          child: FaqManagementScreen(),
+        ),
       ),
     );
   }
@@ -216,10 +262,10 @@ class _HeaderState extends State<Header> {
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: Stack(
+        clipBehavior: Clip.none,
         children: [
           Container(
-            height: 44,
-            width: 44,
+            padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
               color: AppColors.cardWhite,
               borderRadius: BorderRadius.circular(12),
@@ -229,20 +275,17 @@ class _HeaderState extends State<Header> {
           ),
           if (badgeCount > 0)
             Positioned(
-              right: 6,
-              top: 6,
+              top: -5,
+              right: -5,
               child: Container(
                 padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  color: AppColors.error,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: AppColors.cardWhite, width: 2),
-                ),
+                decoration: const BoxDecoration(color: AppColors.error, shape: BoxShape.circle),
                 constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
-                child: Text(
-                  badgeCount > 9 ? '9+' : '$badgeCount',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                child: Center(
+                  child: Text(
+                    badgeCount.toString(),
+                    style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                  ),
                 ),
               ),
             ),

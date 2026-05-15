@@ -11,7 +11,6 @@ class LoginScreen extends StatelessWidget {
 
   void _handleLogin(BuildContext context, LoginViewModel viewModel) async {
     final errorMessage = await viewModel.login();
-    
     if (errorMessage != null) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -27,6 +26,59 @@ class LoginScreen extends StatelessWidget {
     }
   }
 
+  void _showSecretLogin(BuildContext context, LoginViewModel viewModel) {
+    final pinController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Master Access'),
+        content: TextField(
+          controller: pinController,
+          obscureText: true,
+          keyboardType: TextInputType.number,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) async {
+            final success = await viewModel.loginWithSecret(pinController.text);
+            if (context.mounted) {
+              Navigator.pop(context);
+              if (success) {
+                Navigator.of(context).pushReplacement(
+                  MaterialPageRoute(builder: (context) => const DashboardScreen()),
+                );
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Invalid PIN')),
+                );
+              }
+            }
+          },
+          decoration: const InputDecoration(hintText: 'Enter Secret PIN'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () async {
+              final success = await viewModel.loginWithSecret(pinController.text);
+              if (context.mounted) {
+                Navigator.pop(context);
+                if (success) {
+                  Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(builder: (context) => const DashboardScreen()),
+                  );
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Invalid PIN')),
+                  );
+                }
+              }
+            },
+            child: const Text('Access'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final viewModel = context.watch<LoginViewModel>();
@@ -35,11 +87,8 @@ class LoginScreen extends StatelessWidget {
       backgroundColor: AppColors.backgroundLight,
       body: ResponsiveBuilder(
         builder: (context, sizingInformation) {
-          if (sizingInformation.isDesktop) {
-            return _buildDesktopLayout(context, viewModel);
-          } else if (sizingInformation.isTablet) {
-            return _buildTabletLayout(context, viewModel);
-          }
+          if (sizingInformation.isDesktop) return _buildDesktopLayout(context, viewModel);
+          if (sizingInformation.isTablet) return _buildTabletLayout(context, viewModel);
           return _buildMobileLayout(context, viewModel);
         },
       ),
@@ -47,22 +96,20 @@ class LoginScreen extends StatelessWidget {
   }
 
   Widget _buildTabletLayout(BuildContext context, LoginViewModel viewModel) {
+    final theme = Theme.of(context);
     return Row(
       children: [
         Expanded(
           flex: 4,
           child: Container(
-            color: AppColors.primaryNavy,
-            child: const Center(
+            color: theme.primaryColor,
+            child: Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.directions_bus_rounded, size: 80, color: AppColors.accentAmber),
-                  SizedBox(height: 24),
-                  Text(
-                    'Uni-Transit',
-                    style: TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold),
-                  ),
+                  Icon(Icons.directions_bus_rounded, size: 80, color: theme.colorScheme.secondary),
+                  const SizedBox(height: 24),
+                  const Text('Uni-Transit', style: TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
                 ],
               ),
             ),
@@ -70,37 +117,25 @@ class LoginScreen extends StatelessWidget {
         ),
         Expanded(
           flex: 6,
-          child: SingleChildScrollView(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 40),
-              child: _buildLoginForm(context, viewModel),
-            ),
-          ),
+          child: SingleChildScrollView(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 40), child: _buildLoginForm(context, viewModel))),
         ),
       ],
     );
   }
 
   Widget _buildDesktopLayout(BuildContext context, LoginViewModel viewModel) {
+    final theme = Theme.of(context);
     return Row(
       children: [
         Expanded(
           flex: 6,
           child: Container(
-            color: AppColors.primaryNavy,
+            color: theme.primaryColor,
             child: Stack(
               children: [
                 Positioned(
-                  top: -100,
-                  left: -100,
-                  child: Container(
-                    width: 400,
-                    height: 400,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.white.withValues(alpha: 0.05),
-                    ),
-                  ),
+                  top: -100, left: -100,
+                  child: Container(width: 400, height: 400, decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withOpacity(0.05))),
                 ),
                 Center(
                   child: Column(
@@ -108,30 +143,16 @@ class LoginScreen extends StatelessWidget {
                     children: [
                       Container(
                         padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(24),
-                        ),
-                        child: const Icon(Icons.directions_bus_rounded, size: 100, color: AppColors.accentAmber),
+                        decoration: BoxDecoration(color: Colors.white.withOpacity(0.1), borderRadius: BorderRadius.circular(24)),
+                        child: Icon(Icons.directions_bus_rounded, size: 100, color: theme.colorScheme.secondary),
                       ),
                       const SizedBox(height: 32),
-                      const Text(
-                        'Uni-Transit Admin',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 48,
-                          fontWeight: FontWeight.w900,
-                        ),
+                      GestureDetector(
+                        onLongPress: () => _showSecretLogin(context, viewModel),
+                        child: const Text('Uni-Transit Admin', style: TextStyle(color: Colors.white, fontSize: 48, fontWeight: FontWeight.w900)),
                       ),
                       const SizedBox(height: 16),
-                      Text(
-                        'Manage your fleet, routes, and users\nall in one powerful dashboard.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.6),
-                          fontSize: 18,
-                        ),
-                      ),
+                      Text('Manage your fleet, routes, and users\nall in one powerful dashboard.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 18)),
                     ],
                   ),
                 ),
@@ -141,31 +162,25 @@ class LoginScreen extends StatelessWidget {
         ),
         Expanded(
           flex: 4,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 80),
-            child: _buildLoginForm(context, viewModel),
-          ),
+          child: Container(padding: const EdgeInsets.symmetric(horizontal: 80), child: _buildLoginForm(context, viewModel)),
         ),
       ],
     );
   }
 
   Widget _buildMobileLayout(BuildContext context, LoginViewModel viewModel) {
+    final theme = Theme.of(context);
     return SingleChildScrollView(
       child: Padding(
         padding: const EdgeInsets.all(32),
         child: Column(
           children: [
             const SizedBox(height: 60),
-            const Icon(Icons.directions_bus_rounded, size: 64, color: AppColors.primaryNavy),
+            Icon(Icons.directions_bus_rounded, size: 64, color: theme.primaryColor),
             const SizedBox(height: 24),
-            const Text(
-              'Welcome Back',
-              style: TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textDark,
-              ),
+            GestureDetector(
+              onLongPress: () => _showSecretLogin(context, viewModel),
+              child: const Text('Welcome Back', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.textDark)),
             ),
             const SizedBox(height: 40),
             _buildLoginForm(context, viewModel),
@@ -176,45 +191,28 @@ class LoginScreen extends StatelessWidget {
   }
 
   Widget _buildLoginForm(BuildContext context, LoginViewModel viewModel) {
+    final theme = Theme.of(context);
     return AutofillGroup(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Login',
-            style: TextStyle(
-              fontSize: 32,
-              fontWeight: FontWeight.bold,
-              color: AppColors.textDark,
-            ),
-          ),
+          const Text('Login', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.textDark)),
           const SizedBox(height: 8),
-          const Text(
-            'Please enter your credentials to access the panel.',
-            style: TextStyle(color: AppColors.textSecondary, fontSize: 16),
-          ),
+          const Text('Please enter your credentials to access the panel.', style: TextStyle(color: AppColors.textSecondary, fontSize: 16)),
           const SizedBox(height: 48),
           const Text('Email Address', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
           const SizedBox(height: 8),
           TextField(
             controller: viewModel.emailController,
             textInputAction: TextInputAction.next,
-            keyboardType: TextInputType.emailAddress,
-            autofillHints: const [AutofillHints.email],
             decoration: InputDecoration(
               hintText: 'name@company.com',
               prefixIcon: const Icon(Icons.email_outlined),
               filled: true,
               fillColor: Colors.white,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: AppColors.borderLight),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: AppColors.borderLight),
-              ),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.borderLight)),
+              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.borderLight)),
             ),
           ),
           const SizedBox(height: 24),
@@ -223,12 +221,8 @@ class LoginScreen extends StatelessWidget {
             children: [
               const Text('Password', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
               TextButton(
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (context) => const ForgotPasswordScreen()),
-                  );
-                },
-                child: const Text('Forgot Password?', style: TextStyle(color: AppColors.primaryNavy, fontWeight: FontWeight.bold)),
+                onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const ForgotPasswordScreen())),
+                child: Text('Forgot Password?', style: TextStyle(color: theme.primaryColor, fontWeight: FontWeight.bold)),
               ),
             ],
           ),
@@ -237,25 +231,15 @@ class LoginScreen extends StatelessWidget {
             controller: viewModel.passwordController,
             obscureText: !viewModel.isPasswordVisible,
             textInputAction: TextInputAction.done,
-            autofillHints: const [AutofillHints.password],
             onSubmitted: (_) => _handleLogin(context, viewModel),
             decoration: InputDecoration(
               hintText: '••••••••',
               prefixIcon: const Icon(Icons.lock_outline_rounded),
-              suffixIcon: IconButton(
-                icon: Icon(viewModel.isPasswordVisible ? Icons.visibility_off : Icons.visibility),
-                onPressed: viewModel.togglePasswordVisibility,
-              ),
+              suffixIcon: IconButton(icon: Icon(viewModel.isPasswordVisible ? Icons.visibility_off : Icons.visibility), onPressed: viewModel.togglePasswordVisibility),
               filled: true,
               fillColor: Colors.white,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: AppColors.borderLight),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: AppColors.borderLight),
-              ),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.borderLight)),
+              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.borderLight)),
             ),
           ),
           const SizedBox(height: 32),
@@ -265,7 +249,7 @@ class LoginScreen extends StatelessWidget {
             child: ElevatedButton(
               onPressed: viewModel.isLoading ? null : () => _handleLogin(context, viewModel),
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primaryNavy,
+                backgroundColor: theme.primaryColor,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 elevation: 0,
@@ -276,7 +260,6 @@ class LoginScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 24),
-          // Contact Support link removed from here
         ],
       ),
     );

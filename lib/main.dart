@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:unitransit_admin/core/constants/app_colors.dart';
+import 'package:unitransit_admin/core/theme/app_theme.dart';
 import 'package:unitransit_admin/firebase_options.dart';
 import 'package:unitransit_admin/core/services/firebase_service.dart';
 import 'package:unitransit_admin/view_models/dashboard_view_model.dart';
@@ -87,32 +88,24 @@ class AdminPanelApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SessionTimeoutWrapper(
-      child: MaterialApp(
-        title: 'Uni-Transit Admin',
-        navigatorKey: navigatorKey,
-        debugShowCheckedModeBanner: false,
-        scrollBehavior: MyCustomScrollBehavior(),
-        theme: ThemeData(
-          brightness: Brightness.light,
-          primaryColor: AppColors.primaryNavy,
-          scaffoldBackgroundColor: AppColors.backgroundLight,
-          textTheme: GoogleFonts.interTextTheme(
-            ThemeData.light().textTheme,
-          ).apply(
-            bodyColor: AppColors.textDark,
-            displayColor: AppColors.textDark,
-          ),
-          cardTheme: CardThemeData(
-            color: AppColors.cardWhite,
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-              side: const BorderSide(color: AppColors.borderLight),
+      child: Consumer<AppSettingsViewModel>(
+        builder: (context, viewModel, child) {
+          return MaterialApp(
+            title: 'Uni-Transit Admin',
+            navigatorKey: navigatorKey,
+            debugShowCheckedModeBanner: false,
+            scrollBehavior: MyCustomScrollBehavior(),
+            theme: AppTheme.createTheme(
+              primaryHex: viewModel.adminPrimaryColor,
+              accentHex: viewModel.adminAccentColor,
+              backgroundHex: viewModel.adminBackgroundColor,
+              cardHex: viewModel.adminCardColor,
+              textPrimaryHex: viewModel.adminTextPrimaryColor,
+              textSecondaryHex: viewModel.adminTextSecondaryColor,
             ),
-          ),
-          useMaterial3: true,
-        ),
-        home: const SplashScreen(),
+            home: const SplashScreen(),
+          );
+        },
       ),
     );
   }

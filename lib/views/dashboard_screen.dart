@@ -14,6 +14,9 @@ import 'package:unitransit_admin/views/settings_screen.dart';
 import 'package:unitransit_admin/views/fleet_operations_screen.dart';
 import 'package:unitransit_admin/views/route_planning_screen.dart';
 import 'package:unitransit_admin/views/gender_config_screen.dart';
+import 'package:unitransit_admin/views/admins_management_screen.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:unitransit_admin/view_models/login_view_model.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
@@ -41,6 +44,7 @@ class DashboardScreen extends StatelessWidget {
                           DashboardOverview(),
                           StudentsScreen(),
                           DriversScreen(),
+                          AdminsManagementScreen(),
                           FleetOperationsScreen(),
                           RoutePlanningScreen(),
                           GenderConfigScreen(),
@@ -110,6 +114,8 @@ class DashboardOverview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isSuperAdmin = context.read<LoginViewModel>().isSuperAdmin;
+    
     return SingleChildScrollView(
       controller: ScrollController(),
       padding: EdgeInsets.all(AppResponsiveUtil.isMobile(context) ? 16 : 32),
@@ -160,6 +166,13 @@ class DashboardOverview extends StatelessWidget {
           const SizedBox(height: 32),
           const DashboardStatsGrid(),
           const SizedBox(height: 32),
+          
+          // Super Admin Specific Section: Admin Team
+          if (isSuperAdmin) ...[
+            const AdminTeamSection(),
+            const SizedBox(height: 32),
+          ],
+
           if (AppResponsiveUtil.isDesktop(context))
             const Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -183,18 +196,108 @@ class DashboardOverview extends StatelessWidget {
   }
 }
 
+class AdminTeamSection extends StatelessWidget {
+  const AdminTeamSection({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: AppColors.cardWhite,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.borderLight),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Admin Management Team',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.textDark),
+              ),
+              TextButton.icon(
+                onPressed: () => context.read<DashboardViewModel>().setSelectedIndex(3),
+                icon: const Icon(Icons.arrow_forward_rounded, size: 16),
+                label: const Text('Manage All'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance.collection('users').where('role', isEqualTo: 'Admin').limit(5).snapshots(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                return const Text('No other admins added yet.', style: TextStyle(color: AppColors.textSecondary));
+              }
+
+              final admins = snapshot.data!.docs;
+
+              return Wrap(
+                spacing: 16,
+                runSpacing: 16,
+                children: admins.map((doc) {
+                  final admin = doc.data() as Map<String, dynamic>;
+                  final name = admin['name'] ?? 'Admin';
+                  final role = admin['role'] ?? 'Admin';
+                  
+                  return Container(
+                    width: 250,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppColors.backgroundLight.withOpacity(0.5),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AppColors.borderLight),
+                    ),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          backgroundColor: AppColors.primaryNavy.withOpacity(0.1),
+                          child: Text(name[0].toUpperCase(), style: const TextStyle(color: AppColors.primaryNavy, fontWeight: FontWeight.bold)),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                              Text(role, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class DashboardStatsGrid extends StatelessWidget {
   const DashboardStatsGrid({super.key});
 
   @override
   Widget build(BuildContext context) {
     // Optimization: Selector to only rebuild stats when they change
+    final isSuperAdmin = context.read<LoginViewModel>().isSuperAdmin;
+
     return Selector<DashboardViewModel, Map<String, dynamic>>(
       selector: (_, vm) => {
         'students': vm.totalStudents,
         'drivers': vm.totalDrivers,
         'revenue': vm.totalRevenue,
         'alerts': vm.pendingAlerts,
+        'admins': vm.totalAdmins,
       },
       builder: (context, stats, _) {
         return LayoutBuilder(
@@ -221,13 +324,22 @@ class DashboardStatsGrid extends StatelessWidget {
                   color: AppColors.accentAmber,
                   trend: '+${stats['drivers'] > 0 ? "100" : "0"}%',
                 ),
-                StatCard(
-                  title: 'Total Revenue',
-                  value: '\$${stats['revenue'].toStringAsFixed(0)}',
-                  icon: Icons.account_balance_wallet_rounded,
-                  color: AppColors.staffOnly,
-                  trend: '+8%',
-                ),
+                if (isSuperAdmin)
+                  StatCard(
+                    title: 'Total Admins',
+                    value: stats['admins'].toString(),
+                    icon: Icons.admin_panel_settings_rounded,
+                    color: Colors.deepPurple,
+                    trend: stats['admins'] > 0 ? '+${stats['admins']}' : '0',
+                  )
+                else
+                  StatCard(
+                    title: 'Total Revenue',
+                    value: '\$${stats['revenue'].toStringAsFixed(0)}',
+                    icon: Icons.account_balance_wallet_rounded,
+                    color: AppColors.staffOnly,
+                    trend: '+8%',
+                  ),
                 StatCard(
                   title: 'Pending Alerts',
                   value: stats['alerts'].toString(),

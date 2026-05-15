@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 import 'package:unitransit_admin/core/constants/app_colors.dart';
 import 'package:unitransit_admin/view_models/dashboard_view_model.dart';
+import 'package:unitransit_admin/view_models/login_view_model.dart';
 import 'package:unitransit_admin/views/login_screen.dart';
 
 class Sidebar extends StatelessWidget {
@@ -10,6 +11,12 @@ class Sidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final primaryColor = theme.colorScheme.primary;
+    final accentColor = theme.colorScheme.secondary;
+    final loginVM = context.watch<LoginViewModel>();
+    final isSuperAdmin = loginVM.isSuperAdmin;
+
     return Container(
       width: 280,
       height: double.infinity,
@@ -28,15 +35,15 @@ class Sidebar extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [AppColors.primaryNavy, Color(0xFF4F46E5)],
+                    gradient: LinearGradient(
+                      colors: [primaryColor, primaryColor.withOpacity(0.7)],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
                     borderRadius: BorderRadius.circular(14),
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.primaryNavy.withValues(alpha: 0.3),
+                        color: primaryColor.withOpacity(0.3),
                         blurRadius: 12,
                         offset: const Offset(0, 4),
                       ),
@@ -45,24 +52,20 @@ class Sidebar extends StatelessWidget {
                   child: const Icon(Icons.directions_bus_rounded, color: Colors.white, size: 28),
                 ),
                 const SizedBox(width: 16),
-                const Column(
+                Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       'Uni-Transit',
-                      style: TextStyle(
-                        fontSize: 22,
+                      style: theme.textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.w900,
-                        color: AppColors.textDark,
                         letterSpacing: -0.5,
                       ),
                     ),
                     Text(
                       'Admin Panel',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
-                        fontWeight: FontWeight.w500,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ],
@@ -76,16 +79,28 @@ class Sidebar extends StatelessWidget {
             child: ListView(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
               children: [
-                _buildMenuItem(context, 0, Icons.dashboard_rounded, 'Dashboard'),
-                _buildMenuItem(context, 1, Icons.people_alt_rounded, 'Students'),
-                _buildMenuItem(context, 2, Icons.drive_eta_rounded, 'Drivers'),
-                _buildMenuItem(context, 3, Icons.directions_bus_rounded, 'Fleet Operations'),
-                _buildMenuItem(context, 4, Icons.map_rounded, 'Route Planning'),
-                _buildMenuItem(context, 5, Icons.category_rounded, 'Gender Config'),
-                _buildMenuItem(context, 6, Icons.history_rounded, 'Trip History'),
-                _buildMenuItem(context, 7, Icons.notifications_active_rounded, 'Notifications'),
-                _buildMenuItem(context, 8, Icons.support_agent_rounded, 'Support Center'),
-                _buildMenuItem(context, 9, Icons.settings_rounded, 'Settings'),
+                _buildMenuItem(context, 0, Icons.dashboard_rounded, 'Dashboard', primaryColor, accentColor),
+                _buildMenuItem(context, 1, Icons.people_alt_rounded, 'Students', primaryColor, accentColor),
+                _buildMenuItem(context, 2, Icons.drive_eta_rounded, 'Drivers', primaryColor, accentColor),
+                
+                // Super Admin Only: Admins Management (Index 3)
+                if (isSuperAdmin) ...[
+                  _buildMenuItem(context, 3, Icons.admin_panel_settings_rounded, 'Manage Admins', primaryColor, accentColor),
+                ],
+                
+                _buildMenuItem(context, 4, Icons.directions_bus_rounded, 'Fleet Operations', primaryColor, accentColor),
+                _buildMenuItem(context, 5, Icons.map_rounded, 'Route Planning', primaryColor, accentColor),
+                
+                // Super Admin Only: Gender Config (Index 6)
+                if (isSuperAdmin) ...[
+                  _buildMenuItem(context, 6, Icons.category_rounded, 'Gender Config', primaryColor, accentColor),
+                ],
+                
+                _buildMenuItem(context, 7, Icons.history_rounded, 'Trip History', primaryColor, accentColor),
+                _buildMenuItem(context, 8, Icons.notifications_active_rounded, 'Notifications', primaryColor, accentColor),
+                _buildMenuItem(context, 9, Icons.support_agent_rounded, 'Support Center', primaryColor, accentColor),
+                
+                _buildMenuItem(context, 10, Icons.settings_rounded, 'Settings', primaryColor, accentColor),
               ],
             ),
           ),
@@ -93,34 +108,7 @@ class Sidebar extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.all(24),
             child: InkWell(
-              onTap: () {
-                showDialog(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    title: const Text('Logout'),
-                    content: const Text('Are you sure you want to logout?'),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('Cancel'),
-                      ),
-                      TextButton(
-                        onPressed: () async {
-                          Navigator.pop(context); // Close dialog
-                          await FirebaseAuth.instance.signOut();
-                          if (context.mounted) {
-                            Navigator.of(context).pushAndRemoveUntil(
-                              MaterialPageRoute(builder: (context) => const LoginScreen()),
-                              (route) => false,
-                            );
-                          }
-                        },
-                        child: const Text('Logout', style: TextStyle(color: Colors.redAccent)),
-                      ),
-                    ],
-                  ),
-                );
-              },
+              onTap: () => _handleLogout(context),
               borderRadius: BorderRadius.circular(16),
               child: Container(
                 padding: const EdgeInsets.all(16),
@@ -141,7 +129,7 @@ class Sidebar extends StatelessWidget {
                       ),
                     ),
                     const Spacer(),
-                    Icon(Icons.arrow_forward_ios_rounded, color: Colors.redAccent.withValues(alpha: 0.3), size: 12),
+                    Icon(Icons.arrow_forward_ios_rounded, color: Colors.redAccent.withOpacity(0.3), size: 12),
                   ],
                 ),
               ),
@@ -152,23 +140,49 @@ class Sidebar extends StatelessWidget {
     );
   }
 
+  void _handleLogout(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Logout'),
+        content: const Text('Are you sure you want to logout?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await context.read<LoginViewModel>().logout();
+              if (context.mounted) {
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (context) => const LoginScreen()),
+                  (route) => false,
+                );
+              }
+            },
+            child: const Text('Logout', style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+  }
 
-
-  Widget _buildMenuItem(BuildContext context, int index, IconData icon, String title) {
+  Widget _buildMenuItem(BuildContext context, int index, IconData icon, String title, Color primaryColor, Color accentColor) {
     final viewModel = context.watch<DashboardViewModel>();
     final isActive = viewModel.selectedIndex == index;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: isActive ? AppColors.primaryNavy.withValues(alpha: 0.15) : Colors.transparent,
+        color: isActive ? primaryColor.withOpacity(0.12) : Colors.transparent,
         borderRadius: BorderRadius.circular(12),
-        border: isActive ? Border.all(color: AppColors.primaryNavy.withValues(alpha: 0.3)) : null,
+        border: isActive ? Border.all(color: primaryColor.withOpacity(0.2)) : null,
       ),
       child: ListTile(
         onTap: () {
           viewModel.setSelectedIndex(index);
-          // Auto-close drawer on mobile
           if (Scaffold.of(context).isDrawerOpen) {
             Navigator.pop(context);
           }
@@ -176,7 +190,7 @@ class Sidebar extends StatelessWidget {
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         leading: Icon(
           icon,
-          color: isActive ? AppColors.accentAmber : AppColors.textSecondary,
+          color: isActive ? accentColor : AppColors.textSecondary,
           size: 22,
         ),
         title: Text(
@@ -190,8 +204,8 @@ class Sidebar extends StatelessWidget {
         trailing: isActive ? Container(
           width: 6,
           height: 6,
-          decoration: const BoxDecoration(
-            color: AppColors.accentAmber,
+          decoration: BoxDecoration(
+            color: accentColor,
             shape: BoxShape.circle,
           ),
         ) : null,

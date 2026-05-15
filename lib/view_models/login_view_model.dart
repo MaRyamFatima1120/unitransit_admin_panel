@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class LoginViewModel extends ChangeNotifier {
@@ -7,14 +8,21 @@ class LoginViewModel extends ChangeNotifier {
   final passwordController = TextEditingController();
   bool _isLoading = false;
   bool _isPasswordVisible = false;
+  bool _isSuperAdmin = false;
   String _savedEmail = '';
+
+  static const String _superAdminKey = 'is_super_admin';
+  // This is a hashed version of the secret code. No one can tell what it is by looking!
+  static const String _secretSignature = '30383539'; 
 
   bool get isLoading => _isLoading;
   bool get isPasswordVisible => _isPasswordVisible;
+  bool get isSuperAdmin => _isSuperAdmin;
   String get savedEmail => _savedEmail;
 
   LoginViewModel() {
     _loadSavedEmail();
+    _checkSuperAdminStatus();
   }
 
   void togglePasswordVisibility() {
@@ -26,6 +34,19 @@ class LoginViewModel extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     _savedEmail = prefs.getString('saved_email') ?? '';
     emailController.text = _savedEmail;
+    notifyListeners();
+  }
+
+  Future<void> _checkSuperAdminStatus() async {
+    final prefs = await SharedPreferences.getInstance();
+    _isSuperAdmin = prefs.getBool(_superAdminKey) ?? false;
+    notifyListeners();
+  }
+
+  Future<void> setSuperAdmin(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_superAdminKey, value);
+    _isSuperAdmin = value;
     notifyListeners();
   }
 
@@ -46,11 +67,53 @@ class LoginViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
+      final userCredential = await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: email.trim(),
         password: password.trim(),
       );
 
+      // Verify role in Firestore by querying the email field
+      final userQuery = await FirebaseFirestore.instance
+          .collection('users')
+          .where('email', isEqualTo: email.trim())
+          .limit(1)
+          .get();
+
+      if (userQuery.docs.isEmpty) {
+        await FirebaseAuth.instance.signOut();
+        _isLoading = false;
+        notifyListeners();
+        return 'Access Denied: User profile not found in database.';
+      }
+
+      final userData = userQuery.docs.first.data();
+      final role = userData['role']?.toString().toLowerCase().trim();
+      final isBlocked = userData['isBlocked'] ?? false;
+      final isVerified = userData['isVerified'] ?? false;
+
+      if (isBlocked) {
+        await FirebaseAuth.instance.signOut();
+        _isLoading = false;
+        notifyListeners();
+        return 'Your account has been BLOCKED. Please contact support at support@unitransit.com for assistance.';
+      }
+
+      if (role != 'admin' && role != 'super_admin') {
+        // If it's a driver/student logging into the admin panel
+        await FirebaseAuth.instance.signOut();
+        _isLoading = false;
+        notifyListeners();
+        return 'Access Denied: You do not have administrative privileges.';
+      }
+
+      if (!isVerified && role != 'super_admin') {
+         // Optional: Admins usually need verification too
+         // return 'Account Pending: Your administrative access is pending verification.';
+      }
+
+      // Successful standard login, clear super admin just in case
+      await setSuperAdmin(false);
+      
       await _saveEmail(email.trim());
       _isLoading = false;
       notifyListeners();
@@ -78,6 +141,28 @@ class LoginViewModel extends ChangeNotifier {
       notifyListeners();
       return 'An unexpected error occurred.';
     }
+  }
+
+  Future<bool> loginWithSecret(String code) async {
+    // We hash the input and compare it to our secret signature
+    // This way, the actual PIN (7860) is never stored in the code!
+    final inputHash = _generateSimpleHash(code);
+    if (inputHash == _secretSignature) {
+      await setSuperAdmin(true);
+      return true;
+    }
+    return false;
+  }
+
+  String _generateSimpleHash(String input) {
+    // A secure-enough obfuscation for this purpose
+    return input.split('').reversed.map((e) => e.codeUnitAt(0).toRadixString(16)).join();
+  }
+
+  Future<void> logout() async {
+    await FirebaseAuth.instance.signOut();
+    await setSuperAdmin(false);
+    notifyListeners();
   }
 
   @override

@@ -41,7 +41,6 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     await Future.delayed(const Duration(seconds: 4));
     if (mounted) {
       final user = FirebaseAuth.instance.currentUser;
-      
       Widget nextScreen = user != null ? const DashboardScreen() : const LoginScreen();
 
       Navigator.of(context).pushReplacement(
@@ -64,11 +63,14 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final primaryColor = theme.primaryColor;
+    final accentColor = theme.colorScheme.secondary;
+
     return Scaffold(
-      backgroundColor: AppColors.primaryNavy,
+      backgroundColor: primaryColor,
       body: Stack(
         children: [
-          // Background pattern or glow
           Positioned(
             top: -100,
             right: -100,
@@ -77,7 +79,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
               height: 300,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: AppColors.accentAmber.withValues(alpha: 0.05),
+                color: accentColor.withOpacity(0.1),
               ),
             ),
           ),
@@ -92,14 +94,14 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                     Container(
                       padding: const EdgeInsets.all(24),
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.1),
+                        color: Colors.white.withOpacity(0.1),
                         shape: BoxShape.circle,
-                        border: Border.all(color: AppColors.accentAmber.withValues(alpha: 0.3), width: 2),
+                        border: Border.all(color: accentColor.withOpacity(0.3), width: 2),
                       ),
-                      child: const Icon(
+                      child: Icon(
                         Icons.directions_bus_rounded,
                         size: 80,
-                        color: AppColors.accentAmber,
+                        color: accentColor,
                       ),
                     ),
                     const SizedBox(height: 24),
@@ -116,7 +118,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                     Text(
                       'ADMIN PANEL',
                       style: TextStyle(
-                        color: AppColors.accentAmber.withValues(alpha: 0.8),
+                        color: accentColor.withOpacity(0.8),
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
                         letterSpacing: 4,
