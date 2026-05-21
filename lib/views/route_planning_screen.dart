@@ -1,8 +1,13 @@
 import 'dart:convert';
+import 'dart:math' as math;
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:unitransit_admin/core/constants/app_colors.dart';
 import 'package:unitransit_admin/core/services/firebase_service.dart';
 import 'package:unitransit_admin/models/bus_schedule_model.dart';
@@ -24,7 +29,7 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> with SingleTi
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
   }
 
   @override
@@ -54,6 +59,7 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> with SingleTi
                 RouteDefinitionSection(),
                 StopsManagerSection(),
                 PolylineUploaderSection(),
+                MapPreviewSection(),
               ],
             ),
           ),
@@ -123,6 +129,7 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> with SingleTi
           Tab(text: 'Routes'),
           Tab(text: 'Stops'),
           Tab(text: 'Paths'),
+          Tab(text: 'Map Preview'),
         ],
       ),
     );
@@ -603,6 +610,679 @@ class PolylineUploaderSection extends StatelessWidget {
   }
 }
 
+// --- Section E: Map Preview ---
+class MapPreviewSection extends StatefulWidget {
+  const MapPreviewSection({super.key});
+
+  @override
+  State<MapPreviewSection> createState() => _MapPreviewSectionState();
+}
+
+class _MapPreviewSectionState extends State<MapPreviewSection> {
+  String? _selectedRoute;
+  String? _lastFittedRoute;
+  final MapController _mapController = MapController();
+
+  void _fitAllPoints(List<HubModel> hubs, List<StopModel> stops, List<LatLng> polylinePoints) {
+    final List<LatLng> allPoints = [];
+    for (final hub in hubs) {
+      allPoints.add(LatLng(hub.latitude, hub.longitude));
+    }
+    for (final stop in stops) {
+      allPoints.add(LatLng(stop.latitude, stop.longitude));
+    }
+    allPoints.addAll(polylinePoints);
+
+    if (allPoints.isEmpty) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        try {
+          final bounds = LatLngBounds.fromPoints(allPoints);
+          _mapController.fitCamera(
+            CameraFit.bounds(
+              bounds: bounds,
+              padding: const EdgeInsets.all(50),
+            ),
+          );
+        } catch (e) {
+          debugPrint("Error fitting bounds: $e");
+        }
+      }
+    });
+  }
+
+  Widget _buildMapButton({required IconData icon, required VoidCallback onPressed}) {
+    return Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.95),
+        shape: BoxShape.circle,
+        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+      ),
+      child: IconButton(
+        icon: Icon(icon, color: AppColors.primaryNavy, size: 20),
+        onPressed: onPressed,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final firebaseService = context.read<FirebaseService>();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Route selector
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: AppColors.borderLight),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryNavy.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.map_rounded, color: AppColors.primaryNavy, size: 20),
+                ),
+                const SizedBox(width: 16),
+                const Text('Route Map Preview', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                const Spacer(),
+                // Route dropdown
+                StreamBuilder<List<BusSchedule>>(
+                  stream: firebaseService.getBusSchedules(),
+                  builder: (context, snapshot) {
+                    final routes = snapshot.data ?? [];
+                    if (routes.isEmpty) return const SizedBox.shrink();
+
+                    // Auto-select first route
+                    if (_selectedRoute == null && routes.isNotEmpty) {
+                      SchedulerBinding.instance.addPostFrameCallback((_) {
+                        if (mounted) setState(() => _selectedRoute = routes.first.route);
+                      });
+                    }
+
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: AppColors.backgroundLight,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: _selectedRoute,
+                          hint: const Text('Select route', style: TextStyle(fontSize: 13)),
+                          items: routes.map((r) => DropdownMenuItem(value: r.route, child: Text(r.route, style: const TextStyle(fontSize: 13)))).toList(),
+                          onChanged: (v) => setState(() => _selectedRoute = v),
+                          icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Map canvas
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: AppColors.borderLight),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: _selectedRoute == null
+                  ? const Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.map_outlined, size: 64, color: AppColors.textSecondary),
+                          SizedBox(height: 16),
+                          Text('Select a route above to preview its map', style: TextStyle(color: AppColors.textSecondary, fontSize: 14)),
+                        ],
+                      ),
+                    )
+                  : StreamBuilder<List<HubModel>>(
+                      stream: firebaseService.getHubs(),
+                      builder: (context, hubSnapshot) {
+                        return StreamBuilder<List<StopModel>>(
+                          stream: firebaseService.getStops(),
+                          builder: (context, stopSnapshot) {
+                            return StreamBuilder<Map<String, dynamic>>(
+                              stream: firebaseService.getPolylinesStatus(),
+                              builder: (context, polylineSnapshot) {
+                                final hubs = hubSnapshot.data ?? [];
+                                final allStops = stopSnapshot.data ?? [];
+                                final routeStops = allStops.where((s) => s.route == _selectedRoute).toList();
+                                final polylineData = polylineSnapshot.data ?? {};
+
+                                // Parse polyline coordinates for selected route
+                                List<LatLng> polylineLatLngs = [];
+                                if (_selectedRoute != null && polylineData.containsKey(_selectedRoute)) {
+                                  final rawCoords = polylineData[_selectedRoute];
+                                  if (rawCoords is List) {
+                                    for (final coord in rawCoords) {
+                                      if (coord is List && coord.length >= 2) {
+                                        final lat = (coord[0] as num).toDouble();
+                                        final lng = (coord[1] as num).toDouble();
+                                        polylineLatLngs.add(LatLng(lat, lng));
+                                      } else if (coord is Map) {
+                                        final lat = (coord['latitude'] ?? coord['lat'] ?? 0) as num;
+                                        final lng = (coord['longitude'] ?? coord['lng'] ?? 0) as num;
+                                        polylineLatLngs.add(LatLng(lat.toDouble(), lng.toDouble()));
+                                      }
+                                    }
+                                  }
+                                }
+
+                                // Trigger fit camera once when route changes or loaded
+                                if (_selectedRoute != _lastFittedRoute && (hubs.isNotEmpty || routeStops.isNotEmpty || polylineLatLngs.isNotEmpty)) {
+                                  _lastFittedRoute = _selectedRoute;
+                                  _fitAllPoints(hubs, routeStops, polylineLatLngs);
+                                }
+
+                                if (hubs.isEmpty && routeStops.isEmpty && polylineLatLngs.isEmpty) {
+                                  return const Center(
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.info_outline_rounded, size: 48, color: AppColors.textSecondary),
+                                        SizedBox(height: 12),
+                                        Text('No data available for this route.', style: TextStyle(color: AppColors.textSecondary)),
+                                        SizedBox(height: 4),
+                                        Text('Add hubs, stops, and upload a polyline path first.', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                                      ],
+                                    ),
+                                  );
+                                }
+
+                                return Stack(
+                                  children: [
+                                    FlutterMap(
+                                      mapController: _mapController,
+                                      options: const MapOptions(
+                                        initialCenter: LatLng(29.3780, 71.7575), // Baghdad Campus default
+                                        initialZoom: 13,
+                                      ),
+                                      children: [
+                                        TileLayer(
+                                          urlTemplate: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+                                          subdomains: const ['a', 'b', 'c', 'd'],
+                                        ),
+                                        if (polylineLatLngs.isNotEmpty)
+                                          PolylineLayer(
+                                            polylines: [
+                                              Polyline(
+                                                points: polylineLatLngs,
+                                                color: const Color(0xFF1A237E),
+                                                strokeWidth: 5.0,
+                                                borderColor: const Color(0xFFE8EAF6),
+                                                borderStrokeWidth: 2.0,
+                                              ),
+                                            ],
+                                          ),
+                                        MarkerLayer(
+                                          markers: [
+                                            // Stops markers
+                                            ...routeStops.map((stop) {
+                                              return Marker(
+                                                point: LatLng(stop.latitude, stop.longitude),
+                                                width: 120,
+                                                height: 50,
+                                                child: Column(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    Container(
+                                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                      decoration: BoxDecoration(
+                                                        color: Colors.white,
+                                                        borderRadius: BorderRadius.circular(12),
+                                                        border: Border.all(color: Colors.orange),
+                                                        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4)],
+                                                      ),
+                                                      child: Text(
+                                                        stop.name,
+                                                        style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.orange),
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(height: 2),
+                                                    const Icon(Icons.radio_button_checked, color: Colors.orange, size: 16),
+                                                  ],
+                                                ),
+                                              );
+                                            }),
+                                            // Hubs markers
+                                            ...hubs.map((hub) {
+                                              Color markerColor = AppColors.accentAmber;
+                                              if (_selectedRoute != null) {
+                                                final cleanRoute = _selectedRoute!.replaceAll('➔', '->').replaceAll('to', '->');
+                                                final hubNameLower = hub.name.toLowerCase();
+                                                if (cleanRoute.toLowerCase().contains(hubNameLower)) {
+                                                  final routeParts = cleanRoute.split(RegExp(r'->|➔|to'));
+                                                  if (routeParts.length >= 2) {
+                                                    if (routeParts.first.toLowerCase().contains(hubNameLower)) {
+                                                      markerColor = Colors.green; // Start
+                                                    } else if (routeParts.last.toLowerCase().contains(hubNameLower)) {
+                                                      markerColor = Colors.red; // End
+                                                    }
+                                                  }
+                                                }
+                                              }
+
+                                              return Marker(
+                                                point: LatLng(hub.latitude, hub.longitude),
+                                                width: 120,
+                                                height: 65,
+                                                child: Column(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    Container(
+                                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                      decoration: BoxDecoration(
+                                                        color: markerColor,
+                                                        borderRadius: BorderRadius.circular(12),
+                                                        boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4)],
+                                                      ),
+                                                      child: Text(
+                                                        hub.name,
+                                                        style: TextStyle(
+                                                          fontSize: 10,
+                                                          fontWeight: FontWeight.bold,
+                                                          color: markerColor == AppColors.accentAmber ? AppColors.primaryNavy : Colors.white,
+                                                        ),
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(height: 2),
+                                                    Icon(Icons.location_on, color: markerColor, size: 28),
+                                                  ],
+                                                ),
+                                              );
+                                            }),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                    // Control Buttons
+                                    Positioned(
+                                      bottom: 16,
+                                      left: 16,
+                                      child: Column(
+                                        children: [
+                                          _buildMapButton(
+                                            icon: Icons.add,
+                                            onPressed: () {
+                                              _mapController.move(
+                                                _mapController.camera.center,
+                                                _mapController.camera.zoom + 1,
+                                              );
+                                            },
+                                          ),
+                                          const SizedBox(height: 8),
+                                          _buildMapButton(
+                                            icon: Icons.remove,
+                                            onPressed: () {
+                                              _mapController.move(
+                                                _mapController.camera.center,
+                                                _mapController.camera.zoom - 1,
+                                              );
+                                            },
+                                          ),
+                                          const SizedBox(height: 8),
+                                          _buildMapButton(
+                                            icon: Icons.center_focus_strong,
+                                            onPressed: () => _fitAllPoints(hubs, routeStops, polylineLatLngs),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    // Legend
+                                    Positioned(
+                                      bottom: 16,
+                                      right: 16,
+                                      child: Container(
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white.withValues(alpha: 0.95),
+                                          borderRadius: BorderRadius.circular(12),
+                                          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 8)],
+                                        ),
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            const Text('Legend', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.textDark)),
+                                            const SizedBox(height: 8),
+                                            _buildLegendItem(AppColors.accentAmber, Icons.circle, 'Hub / Campus'),
+                                            const SizedBox(height: 4),
+                                            _buildLegendItem(Colors.orange, Icons.radio_button_checked, 'Bus Stop'),
+                                            const SizedBox(height: 4),
+                                            _buildLegendItem(const Color(0xFF1A237E), Icons.remove, 'Route Path'),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                    // Route name badge
+                                    Positioned(
+                                      top: 16,
+                                      left: 16,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.primaryNavy,
+                                          borderRadius: BorderRadius.circular(20),
+                                          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 8)],
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Icon(Icons.directions_bus_rounded, color: Colors.white, size: 14),
+                                            const SizedBox(width: 6),
+                                            Text(
+                                              _selectedRoute ?? '',
+                                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                    // Stats overlay
+                                    Positioned(
+                                      top: 16,
+                                      right: 16,
+                                      child: Container(
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white.withValues(alpha: 0.95),
+                                          borderRadius: BorderRadius.circular(12),
+                                          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 8)],
+                                        ),
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            _buildStatRow(Icons.location_city_rounded, '${hubs.length} Hubs', Colors.blue),
+                                            const SizedBox(height: 4),
+                                            _buildStatRow(Icons.radio_button_checked, '${routeStops.length} Stops', Colors.orange),
+                                            const SizedBox(height: 4),
+                                            _buildStatRow(
+                                              polylineLatLngs.isEmpty ? Icons.warning_amber_rounded : Icons.polyline_rounded,
+                                              polylineLatLngs.isEmpty ? 'No path uploaded' : '${polylineLatLngs.length} coords',
+                                              polylineLatLngs.isEmpty ? Colors.orange : Colors.green,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              },
+                            );
+                          },
+                        );
+                      },
+                    ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLegendItem(Color color, IconData icon, String label) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, color: color, size: 14),
+        const SizedBox(width: 6),
+        Text(label, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+      ],
+    );
+  }
+
+  Widget _buildStatRow(IconData icon, String label, Color color) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, color: color, size: 14),
+        const SizedBox(width: 6),
+        Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+      ],
+    );
+  }
+}
+
+// Grid background painter
+class _MapGridPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0xFFD1D5DB).withValues(alpha: 0.3)
+      ..strokeWidth = 0.5;
+
+    const gridSize = 40.0;
+    for (double x = 0; x < size.width; x += gridSize) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
+    }
+    for (double y = 0; y < size.height; y += gridSize) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+// Route map painter — projects lat/lng to canvas and draws polyline + hubs + stops
+class RouteMapPainter extends CustomPainter {
+  final List<HubModel> hubs;
+  final List<StopModel> stops;
+  final List<List<double>> polylinePoints;
+
+  const RouteMapPainter({
+    required this.hubs,
+    required this.stops,
+    required this.polylinePoints,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const padding = 72.0;
+
+    // Gather all lat/lng values to compute bounding box
+    final List<double> lats = [];
+    final List<double> lngs = [];
+
+    for (final hub in hubs) {
+      lats.add(hub.latitude);
+      lngs.add(hub.longitude);
+    }
+    for (final stop in stops) {
+      lats.add(stop.latitude);
+      lngs.add(stop.longitude);
+    }
+    for (final pt in polylinePoints) {
+      lats.add(pt[0]);
+      lngs.add(pt[1]);
+    }
+
+    if (lats.isEmpty || lngs.isEmpty) return;
+
+    final minLat = lats.reduce(math.min);
+    final maxLat = lats.reduce(math.max);
+    final minLng = lngs.reduce(math.min);
+    final maxLng = lngs.reduce(math.max);
+
+    // Projection function: geo coord → canvas Offset
+    Offset project(double lat, double lng) {
+      final latRange = maxLat - minLat;
+      final lngRange = maxLng - minLng;
+
+      if (latRange == 0 && lngRange == 0) {
+        return Offset(size.width / 2, size.height / 2);
+      }
+
+      final drawW = size.width - padding * 2;
+      final drawH = size.height - padding * 2;
+
+      double x, y;
+      if (lngRange == 0) {
+        x = size.width / 2;
+      } else {
+        x = padding + ((lng - minLng) / lngRange) * drawW;
+      }
+      if (latRange == 0) {
+        y = size.height / 2;
+      } else {
+        // Flip y: higher lat = top of screen
+        y = padding + ((maxLat - lat) / latRange) * drawH;
+      }
+      return Offset(x, y);
+    }
+
+    // 1. Draw polyline path
+    if (polylinePoints.length > 1) {
+      final shadowPaint = Paint()
+        ..color = const Color(0xFF1A237E).withValues(alpha: 0.15)
+        ..strokeWidth = 10
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..style = PaintingStyle.stroke;
+
+      final linePaint = Paint()
+        ..color = const Color(0xFF1A237E)
+        ..strokeWidth = 4
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..style = PaintingStyle.stroke;
+
+      final path = ui.Path();
+      final first = project(polylinePoints[0][0], polylinePoints[0][1]);
+      path.moveTo(first.dx, first.dy);
+      for (int i = 1; i < polylinePoints.length; i++) {
+        final pt = project(polylinePoints[i][0], polylinePoints[i][1]);
+        path.lineTo(pt.dx, pt.dy);
+      }
+
+      canvas.drawPath(path, shadowPaint);
+      canvas.drawPath(path, linePaint);
+
+      // Draw direction arrows along the path
+      final arrowPaint = Paint()
+        ..color = const Color(0xFF1A237E).withValues(alpha: 0.7)
+        ..strokeWidth = 2
+        ..style = PaintingStyle.stroke;
+
+      final step = math.max(1, polylinePoints.length ~/ 6);
+      for (int i = step; i < polylinePoints.length - 1; i += step) {
+        final p1 = project(polylinePoints[i - 1][0], polylinePoints[i - 1][1]);
+        final p2 = project(polylinePoints[i][0], polylinePoints[i][1]);
+        _drawArrow(canvas, p1, p2, arrowPaint);
+      }
+    }
+
+    // 2. Draw stops
+    for (final stop in stops) {
+      final pos = project(stop.latitude, stop.longitude);
+
+      final outerPaint = Paint()..color = Colors.white;
+      final innerPaint = Paint()..color = Colors.orange;
+      final borderPaint = Paint()
+        ..color = Colors.orange.withValues(alpha: 0.6)
+        ..strokeWidth = 2
+        ..style = PaintingStyle.stroke;
+
+      canvas.drawCircle(pos, 9, outerPaint);
+      canvas.drawCircle(pos, 5, innerPaint);
+      canvas.drawCircle(pos, 9, borderPaint);
+
+      // Stop label
+      _drawLabel(canvas, pos, stop.name, const Offset(0, -18), 9, Colors.orange.shade700, Colors.orange.withValues(alpha: 0.1));
+    }
+
+    // 3. Draw hubs (larger markers with pin shape)
+    for (final hub in hubs) {
+      final pos = project(hub.latitude, hub.longitude);
+
+      // Pin shadow
+      final shadowPaint = Paint()..color = Colors.black.withValues(alpha: 0.12);
+      canvas.drawCircle(pos.translate(2, 3), 14, shadowPaint);
+
+      // Outer white ring
+      final outerPaint = Paint()..color = Colors.white;
+      canvas.drawCircle(pos, 14, outerPaint);
+
+      // Filled hub circle
+      final hubPaint = Paint()..color = AppColors.accentAmber;
+      canvas.drawCircle(pos, 11, hubPaint);
+
+      // Icon: small bus icon (dot)
+      final dotPaint = Paint()..color = Colors.white;
+      canvas.drawCircle(pos, 4, dotPaint);
+
+      // Hub label
+      _drawLabel(canvas, pos, hub.name, const Offset(0, 22), 10, const Color(0xFF1A237E), const Color(0xFFE8EAF6));
+    }
+  }
+
+  void _drawArrow(Canvas canvas, Offset from, Offset to, Paint paint) {
+    final dx = to.dx - from.dx;
+    final dy = to.dy - from.dy;
+    final len = math.sqrt(dx * dx + dy * dy);
+    if (len < 10) return;
+
+    final mid = Offset((from.dx + to.dx) / 2, (from.dy + to.dy) / 2);
+    final angle = math.atan2(dy, dx);
+    const arrowSize = 8.0;
+
+    final path = ui.Path();
+    path.moveTo(mid.dx - arrowSize * math.cos(angle - 0.5), mid.dy - arrowSize * math.sin(angle - 0.5));
+    path.lineTo(mid.dx + arrowSize * math.cos(angle), mid.dy + arrowSize * math.sin(angle));
+    path.lineTo(mid.dx - arrowSize * math.cos(angle + 0.5), mid.dy - arrowSize * math.sin(angle + 0.5));
+    canvas.drawPath(path, paint);
+  }
+
+  void _drawLabel(Canvas canvas, Offset pos, String text, Offset labelOffset, double fontSize, Color textColor, Color bgColor) {
+    const maxLen = 18;
+    final displayText = text.length > maxLen ? '${text.substring(0, maxLen)}…' : text;
+
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: displayText,
+        style: TextStyle(color: textColor, fontSize: fontSize, fontWeight: FontWeight.bold),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+
+    final labelPos = pos.translate(labelOffset.dx - textPainter.width / 2, labelOffset.dy);
+    final bgRect = Rect.fromLTWH(labelPos.dx - 4, labelPos.dy - 2, textPainter.width + 8, textPainter.height + 4);
+    canvas.drawRRect(RRect.fromRectAndRadius(bgRect, const Radius.circular(4)), Paint()..color = bgColor);
+    textPainter.paint(canvas, labelPos);
+  }
+
+  @override
+  bool shouldRepaint(covariant RouteMapPainter oldDelegate) =>
+      oldDelegate.hubs != hubs ||
+      oldDelegate.stops != stops ||
+      oldDelegate.polylinePoints != polylinePoints;
+}
+
 // --- Section D: Stops Manager ---
 class StopsManagerSection extends StatelessWidget {
   const StopsManagerSection({super.key});
@@ -830,12 +1510,21 @@ Widget _buildModernField(TextEditingController controller, String hint, IconData
 }
 
 Widget _buildModernDropdown(String? value, List<String> items, String hint, IconData icon, Color iconColor, Function(String?) onChanged) {
+  // Deduplicate items to prevent duplicate dropdown item assertion crash
+  final uniqueItems = items.toSet().toList();
+  
+  // Safe-guard value parameter
+  String? safeValue = value;
+  if (safeValue != null && !uniqueItems.contains(safeValue)) {
+    safeValue = null;
+  }
+
   return Container(
     padding: const EdgeInsets.symmetric(horizontal: 12),
     decoration: BoxDecoration(color: AppColors.backgroundLight, borderRadius: BorderRadius.circular(10)),
     child: DropdownButtonHideUnderline(
       child: DropdownButton<String>(
-        value: value,
+        value: safeValue,
         isExpanded: true,
         hint: Row(
           children: [
@@ -845,7 +1534,7 @@ Widget _buildModernDropdown(String? value, List<String> items, String hint, Icon
           ],
         ),
         icon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.textSecondary, size: 18),
-        items: items.map((t) => DropdownMenuItem(value: t, child: Text(t, style: const TextStyle(fontSize: 13)))).toList(),
+        items: uniqueItems.map((t) => DropdownMenuItem(value: t, child: Text(t, style: const TextStyle(fontSize: 13)))).toList(),
         onChanged: onChanged,
       ),
     ),

@@ -10,9 +10,11 @@ class SupportTicketModel {
   final DateTime timestamp;
   final String userEmail;
   final String userId;
-  final String userName; // Usually empty in screenshot, but present
-  final String userRole; // 'Driver' or 'Student'
+  final String userName;
+  final String userRole;
   final String? adminReply;
+  final bool userRead;
+  final bool adminRead;
 
   SupportTicketModel({
     required this.id,
@@ -27,6 +29,8 @@ class SupportTicketModel {
     required this.userName,
     required this.userRole,
     this.adminReply,
+    this.userRead = true,
+    this.adminRead = true,
   });
 
   factory SupportTicketModel.fromMap(String id, Map<String, dynamic> map) {
@@ -43,6 +47,8 @@ class SupportTicketModel {
       userName: map['userName'] ?? '',
       userRole: map['userRole'] ?? 'Unknown',
       adminReply: map['adminReply'],
+      userRead: map['userRead'] ?? true,
+      adminRead: map['adminRead'] ?? true,
     );
   }
 
@@ -59,12 +65,16 @@ class SupportTicketModel {
       'userName': userName,
       'userRole': userRole,
       'adminReply': adminReply,
+      'userRead': userRead,
+      'adminRead': adminRead,
     };
   }
 
   SupportTicketModel copyWith({
     String? status,
     String? adminReply,
+    bool? userRead,
+    bool? adminRead,
   }) {
     return SupportTicketModel(
       id: id,
@@ -79,6 +89,8 @@ class SupportTicketModel {
       userName: userName,
       userRole: userRole,
       adminReply: adminReply ?? this.adminReply,
+      userRead: userRead ?? this.userRead,
+      adminRead: adminRead ?? this.adminRead,
     );
   }
 }

@@ -1,34 +1,1074 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:firebase_database/firebase_database.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 import 'package:unitransit_admin/core/constants/app_colors.dart';
+import 'package:unitransit_admin/core/utils/responsive_util.dart';
+import 'package:unitransit_admin/models/bus_schedule_model.dart';
 
-class FleetOperationsScreen extends StatelessWidget {
+class FleetOperationsScreen extends StatefulWidget {
   const FleetOperationsScreen({super.key});
 
   @override
+  State<FleetOperationsScreen> createState() => _FleetOperationsScreenState();
+}
+
+class _FleetOperationsScreenState extends State<FleetOperationsScreen> with TickerProviderStateMixin {
+  final _searchController = TextEditingController();
+  final MapController _mapController = MapController();
+  final DatabaseReference _busesRef = FirebaseDatabase.instance.ref('buses');
+  StreamSubscription? _busesSubscription;
+  StreamSubscription? _schedulesSubscription;
+
+  final LatLng _defaultCenter = const LatLng(29.378047555871532, 71.75750718286565); // Baghdad Campus
+
+  List<Map<String, dynamic>> _allBuses = [];
+  List<Map<String, dynamic>> _filteredBuses = [];
+  List<BusSchedule> _schedules = [];
+  String? _selectedBusId;
+  bool _isLoading = true;
+  String _selectedGenderFilter = 'All';
+
+  @override
+  void initState() {
+    super.initState();
+    _listenToActiveBuses();
+    _listenToSchedules();
+    _searchController.addListener(_applyFilters);
+  }
+
+  @override
+  void dispose() {
+    _busesSubscription?.cancel();
+    _schedulesSubscription?.cancel();
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _listenToActiveBuses() {
+    _busesSubscription = _busesRef.onValue.listen((event) {
+      final data = event.snapshot.value as Map<dynamic, dynamic>?;
+      final List<Map<String, dynamic>> loadedBuses = [];
+
+      if (data != null) {
+        data.forEach((key, value) {
+          if (value is Map) {
+            loadedBuses.add({
+              'id': key.toString(),
+              ...Map<String, dynamic>.from(value),
+            });
+          }
+        });
+      }
+
+      if (mounted) {
+        setState(() {
+          _allBuses = loadedBuses;
+          _isLoading = false;
+          _applyFilters();
+        });
+      }
+    }, onError: (error) {
+      debugPrint("Error loading active buses: $error");
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    });
+  }
+
+  void _listenToSchedules() {
+    _schedulesSubscription = FirebaseFirestore.instance
+        .collection('schedules')
+        .snapshots()
+        .listen((snapshot) {
+      final List<BusSchedule> loadedSchedules = snapshot.docs
+          .map((doc) => BusSchedule.fromMap(doc.id, doc.data()))
+          .toList();
+      if (mounted) {
+        setState(() {
+          _schedules = loadedSchedules;
+        });
+      }
+    });
+  }
+
+  BusSchedule? _getMatchingSchedule(Map<String, dynamic> bus) {
+    if (_schedules.isEmpty) return null;
+    final busNum = (bus['busNumber'] ?? '').toString().toLowerCase().trim();
+    if (busNum.isEmpty) return null;
+
+    final matchedByBus = _schedules.where((s) {
+      final sBus = (s.busNumber ?? '').toLowerCase().trim();
+      return sBus == busNum || sBus.contains(busNum) || busNum.contains(sBus);
+    }).toList();
+
+    if (matchedByBus.isNotEmpty) {
+      final todayWeekday = DateFormat('EEEE').format(DateTime.now());
+      for (var schedule in matchedByBus) {
+        if (schedule.operatingDays != null && schedule.operatingDays!.contains(todayWeekday)) {
+          return schedule;
+        }
+      }
+      return matchedByBus.first;
+    }
+
+    final matchedByRoute = _schedules.where((s) {
+      final sFrom = s.from.toLowerCase().trim();
+      final sTo = s.to.toLowerCase().trim();
+      final busFrom = (bus['from'] ?? '').toString().toLowerCase().trim();
+      final busTo = (bus['to'] ?? '').toString().toLowerCase().trim();
+
+      return sFrom == busFrom && sTo == busTo;
+    }).toList();
+
+    if (matchedByRoute.isNotEmpty) {
+      return matchedByRoute.first;
+    }
+
+    return null;
+  }
+
+  int get _totalSchedulesToday {
+    final todayWeekday = DateFormat('EEEE').format(DateTime.now());
+    final todayDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    return _schedules.where((s) {
+      final isDay = s.operatingDays != null && s.operatingDays!.contains(todayWeekday);
+      final isDate = s.date != null && s.date == todayDate;
+      return isDay || isDate;
+    }).length;
+  }
+
+  int get _activeSchedulesToday {
+    final todayWeekday = DateFormat('EEEE').format(DateTime.now());
+    final todayDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final todaySchedules = _schedules.where((s) {
+      final isDay = s.operatingDays != null && s.operatingDays!.contains(todayWeekday);
+      final isDate = s.date != null && s.date == todayDate;
+      return isDay || isDate;
+    }).toList();
+
+    int count = 0;
+    for (var schedule in todaySchedules) {
+      final isAnyBusCovering = _allBuses.any((bus) {
+        final busNum = (bus['busNumber'] ?? '').toString().toLowerCase().trim();
+        final sBus = (schedule.busNumber ?? '').toLowerCase().trim();
+        if (sBus == busNum && busNum.isNotEmpty) return true;
+
+        final sFrom = schedule.from.toLowerCase().trim();
+        final sTo = schedule.to.toLowerCase().trim();
+        final busFrom = (bus['from'] ?? '').toString().toLowerCase().trim();
+        final busTo = (bus['to'] ?? '').toString().toLowerCase().trim();
+        return sFrom == busFrom && sTo == busTo;
+      });
+      if (isAnyBusCovering) count++;
+    }
+    return count;
+  }
+
+  void _applyFilters() {
+    final query = _searchController.text.toLowerCase().trim();
+    List<Map<String, dynamic>> temp = _allBuses;
+
+    // Filter by search query
+    if (query.isNotEmpty) {
+      temp = temp.where((bus) {
+        final busNum = (bus['busNumber'] ?? '').toString().toLowerCase();
+        final driver = (bus['driverName'] ?? '').toString().toLowerCase();
+        final from = (bus['from'] ?? '').toString().toLowerCase();
+        final to = (bus['to'] ?? '').toString().toLowerCase();
+        final plate = (bus['plateNumber'] ?? '').toString().toLowerCase();
+
+        return busNum.contains(query) ||
+            driver.contains(query) ||
+            from.contains(query) ||
+            to.contains(query) ||
+            plate.contains(query);
+      }).toList();
+    }
+
+    // Filter by gender selection
+    if (_selectedGenderFilter != 'All') {
+      temp = temp.where((bus) {
+        final gender = (bus['gender'] ?? '').toString().toLowerCase();
+        return gender == _selectedGenderFilter.toLowerCase();
+      }).toList();
+    }
+
+    setState(() {
+      _filteredBuses = temp;
+    });
+  }
+
+  void _locateBus(Map<String, dynamic> bus) {
+    final lat = (bus['latitude'] as num?)?.toDouble() ?? 0.0;
+    final lng = (bus['longitude'] as num?)?.toDouble() ?? 0.0;
+
+    if (lat != 0.0 && lng != 0.0) {
+      setState(() {
+        _selectedBusId = bus['id'];
+      });
+      _animatedMapMove(LatLng(lat, lng), 16.0);
+    }
+  }
+
+  void _animatedMapMove(LatLng destLocation, double destZoom) {
+    final latTween = Tween<double>(
+      begin: _mapController.camera.center.latitude,
+      end: destLocation.latitude,
+    );
+    final lngTween = Tween<double>(
+      begin: _mapController.camera.center.longitude,
+      end: destLocation.longitude,
+    );
+    final zoomTween = Tween<double>(
+      begin: _mapController.camera.zoom,
+      end: destZoom,
+    );
+
+    final controller = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+    final animation = CurvedAnimation(
+      parent: controller,
+      curve: Curves.fastOutSlowIn,
+    );
+
+    controller.addListener(() {
+      _mapController.move(
+        LatLng(latTween.evaluate(animation), lngTween.evaluate(animation)),
+        zoomTween.evaluate(animation),
+      );
+    });
+
+    animation.addStatusListener((status) {
+      if (status == AnimationStatus.completed || status == AnimationStatus.dismissed) {
+        controller.dispose();
+      }
+    });
+
+    controller.forward();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final isMobile = AppResponsiveUtil.isMobile(context);
+    final selectedBus = _selectedBusId != null
+        ? _allBuses.firstWhere((b) => b['id'] == _selectedBusId, orElse: () => {})
+        : null;
+
     return Padding(
-      padding: const EdgeInsets.all(32.0),
+      padding: EdgeInsets.all(isMobile ? 16 : 32),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Fleet Operations',
-            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textDark,
-                ),
+          // Header details
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Live Bus Tracking',
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textDark,
+                          fontSize: isMobile ? 24 : null,
+                        ),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Monitor university buses and active driver locations in real-time.',
+                    style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                  ),
+                ],
+              ),
+              if (!isMobile) _buildStatsBadges(),
+            ],
           ),
-          const Text('Monitor and manage the university bus fleet.',
-              style: TextStyle(color: AppColors.textSecondary)),
-          const SizedBox(height: 50),
-          const Center(
-            child: Column(
+          const SizedBox(height: 20),
+          if (isMobile) ...[
+            _buildStatsBadges(),
+            const SizedBox(height: 16),
+          ],
+
+          // Split View layout
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Icon(Icons.engineering, size: 80, color: Colors.grey),
-                SizedBox(height: 16),
-                Text('Fleet Management Module is under maintenance.',
-                    style: TextStyle(color: Colors.grey)),
+                // Directory List Side (Left Panel)
+                if (!isMobile)
+                  SizedBox(
+                    width: 380,
+                    child: Card(
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                        side: const BorderSide(color: AppColors.borderLight),
+                      ),
+                      color: AppColors.cardWhite,
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: _buildDirectoryList(),
+                      ),
+                    ),
+                  ),
+                if (!isMobile) const SizedBox(width: 20),
+
+                // Map & Mobile Toggle Stack Side (Right Panel)
+                Expanded(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(24),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: AppColors.cardWhite,
+                        border: Border.all(color: AppColors.borderLight),
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      child: Stack(
+                        children: [
+                          // The Interactive Map
+                          FlutterMap(
+                            mapController: _mapController,
+                            options: MapOptions(
+                              initialCenter: _defaultCenter,
+                              initialZoom: 13,
+                            ),
+                            children: [
+                              TileLayer(
+                                urlTemplate: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+                                subdomains: const ['a', 'b', 'c', 'd'],
+                              ),
+                              MarkerLayer(
+                                markers: _buildMapMarkers(),
+                              ),
+                            ],
+                          ),
+
+                          // Map Controls overlay
+                          Positioned(
+                            right: 16,
+                            bottom: 16,
+                            child: Column(
+                              children: [
+                                _buildMapButton(
+                                  icon: Icons.add,
+                                  onPressed: () => _mapController.move(
+                                    _mapController.camera.center,
+                                    _mapController.camera.zoom + 1,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                _buildMapButton(
+                                  icon: Icons.remove,
+                                  onPressed: () => _mapController.move(
+                                    _mapController.camera.center,
+                                    _mapController.camera.zoom - 1,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                _buildMapButton(
+                                  icon: Icons.my_location,
+                                  onPressed: () => _animatedMapMove(_defaultCenter, 13.5),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          // Selected Bus Information Card popup overlay
+                          if (selectedBus != null && selectedBus.isNotEmpty)
+                            Positioned(
+                              left: 16,
+                              bottom: 16,
+                              right: isMobile ? 80 : 16,
+                              child: _buildSelectedBusDetailsCard(selectedBus),
+                            ),
+
+                          // Mobile Drawer/Directory Toggle
+                          if (isMobile)
+                            Positioned(
+                              left: 16,
+                              top: 16,
+                              child: FloatingActionButton.small(
+                                backgroundColor: AppColors.primaryNavy,
+                                foregroundColor: Colors.white,
+                                child: const Icon(Icons.menu),
+                                onPressed: () {
+                                  showModalBottomSheet(
+                                    context: context,
+                                    isScrollControlled: true,
+                                    backgroundColor: Colors.transparent,
+                                    builder: (context) => DraggableScrollableSheet(
+                                      initialChildSize: 0.85,
+                                      minChildSize: 0.5,
+                                      maxChildSize: 0.95,
+                                      builder: (context, scrollController) => Container(
+                                        decoration: const BoxDecoration(
+                                          color: AppColors.backgroundLight,
+                                          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                                        ),
+                                        padding: const EdgeInsets.all(16),
+                                        child: Column(
+                                          children: [
+                                            Container(
+                                              width: 40,
+                                              height: 5,
+                                              decoration: BoxDecoration(
+                                                color: Colors.grey[300],
+                                                borderRadius: BorderRadius.circular(10),
+                                              ),
+                                            ),
+                                            const SizedBox(height: 16),
+                                            Expanded(
+                                              child: _buildDirectoryList(),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatsBadges() {
+    final activeCount = _allBuses.length;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildCounterChip('Active Now', activeCount.toString(), Colors.green),
+        const SizedBox(width: 12),
+        _buildCounterChip('System Status', 'Online', AppColors.primaryNavy),
+      ],
+    );
+  }
+
+  Widget _buildCounterChip(String label, String value, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(30),
+        border: Border.all(color: color.withOpacity(0.2)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(shape: BoxShape.circle, color: color),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey[800]),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            value,
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: color),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMapButton({required IconData icon, required VoidCallback onPressed}) {
+    return FloatingActionButton.small(
+      heroTag: null,
+      backgroundColor: Colors.white,
+      foregroundColor: AppColors.primaryNavy,
+      elevation: 3,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      onPressed: onPressed,
+      child: Icon(icon, size: 20),
+    );
+  }
+
+  Widget _buildDirectoryList() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Search text input
+        TextField(
+          controller: _searchController,
+          style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w500),
+          decoration: InputDecoration(
+            hintText: 'Search active buses...',
+            prefixIcon: const Icon(Icons.search_rounded, color: AppColors.textSecondary, size: 20),
+            filled: true,
+            fillColor: const Color(0xFFF8FAFC),
+            isDense: true,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: AppColors.borderLight),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: AppColors.primaryNavy),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        _buildScheduleProgressWidget(),
+        const SizedBox(height: 12),
+
+        // Quick Gender Filters
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: ['All', 'Boys', 'Girls', 'Combined'].map((gender) {
+              final isSelected = _selectedGenderFilter == gender;
+              return Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: ChoiceChip(
+                  label: Text(
+                    gender,
+                    style: GoogleFonts.poppins(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: isSelected ? Colors.white : AppColors.textSecondary,
+                    ),
+                  ),
+                  selected: isSelected,
+                  selectedColor: AppColors.primaryNavy,
+                  backgroundColor: const Color(0xFFF1F5F9),
+                  showCheckmark: false,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    side: BorderSide(
+                      color: isSelected ? AppColors.primaryNavy : Colors.transparent,
+                    ),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  onSelected: (selected) {
+                    if (selected) {
+                      setState(() {
+                        _selectedGenderFilter = gender;
+                        _applyFilters();
+                      });
+                    }
+                  },
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Bus listings
+        Expanded(
+          child: _isLoading
+              ? const Center(child: CircularProgressIndicator(color: AppColors.primaryNavy))
+              : _filteredBuses.isEmpty
+                  ? _buildEmptyListState()
+                  : ListView.separated(
+                      itemCount: _filteredBuses.length,
+                      separatorBuilder: (context, index) => const SizedBox(height: 10),
+                      itemBuilder: (context, index) {
+                        final bus = _filteredBuses[index];
+                        final isSelected = _selectedBusId == bus['id'];
+                        final speed = (bus['speed'] as num?)?.toDouble() ?? 0.0;
+                        final lastUpdated = bus['lastUpdated'] != null
+                            ? DateTime.fromMillisecondsSinceEpoch(bus['lastUpdated'] as int)
+                            : DateTime.now();
+
+                        return _buildBusListItem(bus, isSelected, speed, lastUpdated);
+                      },
+                    ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBusListItem(Map<String, dynamic> bus, bool isSelected, double speed, DateTime lastUpdated) {
+    final gender = (bus['gender'] ?? 'Combined').toString();
+    final genderColor = gender.toLowerCase() == 'girls'
+        ? Colors.pinkAccent
+        : (gender.toLowerCase() == 'boys' ? Colors.blueAccent : Colors.teal);
+
+    final matchedSchedule = _getMatchingSchedule(bus);
+
+    return InkWell(
+      onTap: () => _locateBus(bus),
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.primaryNavy.withOpacity(0.04) : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected ? AppColors.primaryNavy : AppColors.borderLight,
+            width: isSelected ? 1.5 : 1.0,
+          ),
+        ),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                // Bus Icon badge
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryNavy.withOpacity(0.08),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.directions_bus_filled, color: AppColors.primaryNavy, size: 20),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            'Bus #${bus['busNumber'] ?? 'N/A'}',
+                            style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textDark),
+                          ),
+                          const SizedBox(width: 6),
+                          // Gender Tag
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: genderColor.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              gender.toUpperCase(),
+                              style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: genderColor),
+                            ),
+                          ),
+                        ],
+                      ),
+                      Text(
+                        'Driver: ${bus['driverName'] ?? 'No Name'}',
+                        style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w500),
+                      ),
+                    ],
+                  ),
+                ),
+                // Pulse Animation Indicator
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: Colors.green,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ],
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Divider(height: 1, color: AppColors.borderLight),
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Row(
+                    children: [
+                      const Icon(Icons.route_outlined, size: 14, color: AppColors.textSecondary),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          '${bus['from'] ?? 'Start'} ➔ ${bus['to'] ?? 'End'}',
+                          style: GoogleFonts.poppins(fontSize: 11, color: AppColors.textDark, fontWeight: FontWeight.w500),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Text(
+                  '${speed.toStringAsFixed(0)} km/h',
+                  style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primaryNavy),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (matchedSchedule != null)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.primaryNavy.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.event_note_rounded, size: 12, color: AppColors.primaryNavy),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'Schedule: ${matchedSchedule.departureTime ?? 'Live'} Run',
+                        style: GoogleFonts.poppins(fontSize: 10, color: AppColors.primaryNavy, fontWeight: FontWeight.bold),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline_rounded, size: 12, color: Colors.orange),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'Ad-hoc/Unscheduled Run',
+                        style: GoogleFonts.poppins(fontSize: 10, color: Colors.orange[800], fontWeight: FontWeight.bold),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyListState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.directions_bus_outlined, size: 48, color: Colors.grey[300]),
+          const SizedBox(height: 12),
+          Text(
+            'No active buses found.',
+            style: GoogleFonts.poppins(color: AppColors.textSecondary, fontSize: 13, fontWeight: FontWeight.w600),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSelectedBusDetailsCard(Map<String, dynamic> bus) {
+    final speed = (bus['speed'] as num?)?.toDouble() ?? 0.0;
+    final plate = bus['plateNumber']?.toString() ?? 'N/A';
+    final remainingTime = bus['remainingTime']?.toString() ?? 'N/A';
+    final matchedSchedule = _getMatchingSchedule(bus);
+
+    return Card(
+      elevation: 6,
+      shadowColor: Colors.black.withOpacity(0.15),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      color: Colors.white,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  backgroundColor: AppColors.primaryNavy.withOpacity(0.08),
+                  radius: 20,
+                  child: const Icon(Icons.directions_bus_outlined, color: AppColors.primaryNavy, size: 22),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Bus #${bus['busNumber'] ?? 'N/A'}',
+                        style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.textDark),
+                      ),
+                      Text(
+                        'License Plate: $plate',
+                        style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w500),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, size: 18),
+                  onPressed: () => setState(() => _selectedBusId = null),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.backgroundLight,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _buildCardMiniStat(Icons.speed, 'Speed', '${speed.toStringAsFixed(0)} km/h'),
+                  Container(width: 1, height: 28, color: AppColors.borderLight),
+                  _buildCardMiniStat(Icons.route_outlined, 'Gender', bus['gender'] ?? 'Combined'),
+                  Container(width: 1, height: 28, color: AppColors.borderLight),
+                  _buildCardMiniStat(Icons.timer_outlined, 'ETA', remainingTime),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                const Icon(Icons.location_on_outlined, size: 16, color: Colors.green),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Current Trip: ${bus['from'] ?? 'Start'} to ${bus['to'] ?? 'End'}',
+                    style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textDark, fontWeight: FontWeight.w600),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (matchedSchedule != null)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppColors.primaryNavy.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.event_note_rounded, size: 16, color: AppColors.primaryNavy),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Active Schedule Covered',
+                            style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
+                          ),
+                          Text(
+                            '${matchedSchedule.route} (${matchedSchedule.departureTime ?? 'N/A'})',
+                            style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primaryNavy),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline_rounded, size: 16, color: Colors.orange),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Operational Status',
+                            style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey[600]),
+                          ),
+                          Text(
+                            'Ad-hoc Run (No Official Schedule Match)',
+                            style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.orange[800]),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCardMiniStat(IconData icon, String label, String value) {
+    return Column(
+      children: [
+        Icon(icon, size: 16, color: AppColors.textSecondary),
+        const SizedBox(height: 4),
+        Text(value, style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textDark)),
+      ],
+    );
+  }
+
+  List<Marker> _buildMapMarkers() {
+    return _filteredBuses.map((bus) {
+      final lat = (bus['latitude'] as num?)?.toDouble() ?? 0.0;
+      final lng = (bus['longitude'] as num?)?.toDouble() ?? 0.0;
+      final isSelected = _selectedBusId == bus['id'];
+      final gender = (bus['gender'] ?? 'Combined').toString();
+      final genderColor = gender.toLowerCase() == 'girls'
+          ? Colors.pinkAccent
+          : (gender.toLowerCase() == 'boys' ? Colors.blueAccent : Colors.teal);
+
+      return Marker(
+        point: LatLng(lat, lng),
+        width: 80,
+        height: 80,
+        child: GestureDetector(
+          onTap: () {
+            setState(() {
+              _selectedBusId = bus['id'];
+            });
+            _animatedMapMove(LatLng(lat, lng), 15.5);
+          },
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Floating Bus Number Badge Tag
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isSelected ? AppColors.primaryNavy : Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: isSelected ? AppColors.accentAmber : genderColor, width: 1.5),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Text(
+                  '#${bus['busNumber'] ?? '??'}',
+                  style: GoogleFonts.poppins(
+                    color: isSelected ? Colors.white : AppColors.textDark,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 4),
+              // Custom Pin Marker
+              Stack(
+                alignment: Alignment.center,
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: isSelected ? AppColors.accentAmber : genderColor,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 2),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.15),
+                          blurRadius: 6,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.directions_bus_rounded,
+                      color: Colors.white,
+                      size: 18,
+                    ),
+                  ),
+                  if (isSelected)
+                    TweenAnimationBuilder<double>(
+                      tween: Tween<double>(begin: 0.8, end: 1.4),
+                      duration: const Duration(seconds: 1),
+                      curve: Curves.easeInOut,
+                      builder: (context, value, child) {
+                        return Container(
+                          width: 38 * value,
+                          height: 38 * value,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(color: AppColors.accentAmber.withOpacity(1.0 - (value - 0.8) / 0.6), width: 1.5),
+                          ),
+                        );
+                      },
+                      onEnd: () {},
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+    }).toList();
+  }
+
+  Widget _buildScheduleProgressWidget() {
+    final total = _totalSchedulesToday;
+    final active = _activeSchedulesToday;
+    final progress = total > 0 ? (active / total) : 0.0;
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.primaryNavy.withOpacity(0.04),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.primaryNavy.withOpacity(0.1)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.event_note_rounded, color: AppColors.primaryNavy, size: 16),
+                  const SizedBox(width: 6),
+                  Text(
+                    "Today's Schedule Runs",
+                    style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textDark),
+                  ),
+                ],
+              ),
+              Text(
+                "$active / $total Active",
+                style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primaryNavy),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: LinearProgressIndicator(
+              value: progress,
+              backgroundColor: Colors.grey[200],
+              valueColor: const AlwaysStoppedAnimation<Color>(AppColors.accentAmber),
+              minHeight: 6,
             ),
           ),
         ],

@@ -4,6 +4,7 @@ import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:unitransit_admin/core/constants/app_colors.dart';
 import 'package:unitransit_admin/core/utils/responsive_util.dart';
 import 'package:unitransit_admin/view_models/gender_config_view_model.dart';
+import 'package:unitransit_admin/view_models/login_view_model.dart';
 
 class GenderConfigScreen extends StatefulWidget {
   const GenderConfigScreen({super.key});
@@ -218,6 +219,7 @@ class _GenderConfigScreenState extends State<GenderConfigScreen> {
   @override
   Widget build(BuildContext context) {
     final viewModel = context.watch<GenderConfigViewModel>();
+    final isSuperAdmin = context.watch<LoginViewModel>().isSuperAdmin;
     final isDesktop = AppResponsiveUtil.isDesktop(context);
     final isMobile = AppResponsiveUtil.isMobile(context);
 
@@ -228,14 +230,14 @@ class _GenderConfigScreenState extends State<GenderConfigScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildHeader(context, isMobile),
+            _buildHeader(context, isMobile, isSuperAdmin),
             const SizedBox(height: 32),
             Expanded(
               child: viewModel.isLoading
                   ? const Center(child: CircularProgressIndicator())
                   : viewModel.genderConfigs.isEmpty
                       ? _buildEmptyState()
-                      : _buildGenderGrid(viewModel, isDesktop),
+                      : _buildGenderGrid(viewModel, isDesktop, isSuperAdmin),
             ),
           ],
         ),
@@ -243,7 +245,7 @@ class _GenderConfigScreenState extends State<GenderConfigScreen> {
     );
   }
 
-  Widget _buildHeader(BuildContext context, bool isMobile) {
+  Widget _buildHeader(BuildContext context, bool isMobile, bool isSuperAdmin) {
     return Wrap(
       spacing: 16,
       runSpacing: 16,
@@ -275,17 +277,18 @@ class _GenderConfigScreenState extends State<GenderConfigScreen> {
             ),
           ],
         ),
-        ElevatedButton.icon(
-          onPressed: () => _showAddDialog(context),
-          icon: const Icon(Icons.add_rounded, size: 18),
-          label: const Text('Add Category'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.primaryNavy,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        if (isSuperAdmin)
+          ElevatedButton.icon(
+            onPressed: () => _showAddDialog(context),
+            icon: const Icon(Icons.add_rounded, size: 18),
+            label: const Text('Add Category'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primaryNavy,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
           ),
-        ),
       ],
     );
   }
@@ -296,7 +299,7 @@ class _GenderConfigScreenState extends State<GenderConfigScreen> {
     );
   }
 
-  Widget _buildGenderGrid(GenderConfigViewModel viewModel, bool isDesktop) {
+  Widget _buildGenderGrid(GenderConfigViewModel viewModel, bool isDesktop, bool isSuperAdmin) {
     return GridView.builder(
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: isDesktop ? 3 : (MediaQuery.of(context).size.width > 600 ? 2 : 1),
@@ -329,17 +332,18 @@ class _GenderConfigScreenState extends State<GenderConfigScreen> {
                       child: Icon(Icons.person_rounded, color: color, size: 20),
                     ),
                     const Spacer(),
-                    PopupMenuButton<String>(
-                      onSelected: (v) {
-                        if (v == 'edit') _showAddDialog(context, name, color);
-                        if (v == 'delete') _showDeleteConfirm(context, name);
-                      },
-                      icon: const Icon(Icons.more_horiz_rounded, color: AppColors.textSecondary),
-                      itemBuilder: (context) => [
-                        const PopupMenuItem(value: 'edit', child: Text('Edit')),
-                        const PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: Colors.red))),
-                      ],
-                    ),
+                    if (isSuperAdmin)
+                      PopupMenuButton<String>(
+                        onSelected: (v) {
+                          if (v == 'edit') _showAddDialog(context, name, color);
+                          if (v == 'delete') _showDeleteConfirm(context, name);
+                        },
+                        icon: const Icon(Icons.more_horiz_rounded, color: AppColors.textSecondary),
+                        itemBuilder: (context) => [
+                          const PopupMenuItem(value: 'edit', child: Text('Edit')),
+                          const PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: Colors.red))),
+                        ],
+                      ),
                   ],
                 ),
                 const Spacer(),

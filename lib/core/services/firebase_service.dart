@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'package:firebase_database/firebase_database.dart';
+import 'package:firebase_database/firebase_database.dart' hide Query;
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:unitransit_admin/models/driver_model.dart';
@@ -65,6 +65,16 @@ class FirebaseService {
   // Drivers
   Future<void> addDriver(DriverModel driver) async {
     await _db.collection('drivers').doc(driver.id).set(driver.toMap());
+    await _db.collection('users').doc(driver.id).set({
+      'uid': driver.id,
+      'name': driver.name,
+      'email': driver.email,
+      'role': 'Driver',
+      'isVerified': driver.isVerified,
+      'isBlocked': driver.isBlocked,
+      'status': driver.status,
+      'createdAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
   }
 
   Stream<List<DriverModel>> getDrivers() {
@@ -75,6 +85,24 @@ class FirebaseService {
 
   Future<void> updateDriver(DriverModel driver) async {
     await _db.collection('drivers').doc(driver.id).update(driver.toMap());
+    try {
+      await _db.collection('users').doc(driver.id).update({
+        'isVerified': driver.isVerified,
+        'isBlocked': driver.isBlocked,
+        'status': driver.status,
+        'name': driver.name,
+      });
+    } catch (_) {
+      await _db.collection('users').doc(driver.id).set({
+        'uid': driver.id,
+        'name': driver.name,
+        'email': driver.email,
+        'role': 'Driver',
+        'isVerified': driver.isVerified,
+        'isBlocked': driver.isBlocked,
+        'status': driver.status,
+      }, SetOptions(merge: true));
+    }
   }
 
   Future<void> deleteDriver(String id) async {
@@ -87,46 +115,41 @@ class FirebaseService {
     await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
   }
 
+  Future<void> resetStudentPassword(String email) async {
+    await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+  }
+
   // Students
   Future<void> addStudent(StudentModel student) async {
-    await _db.collection('students').doc(student.id).set(student.toMap());
+    await _db.collection('users').doc(student.id).set(student.toMap());
+    await _db.collection('students').doc(student.id).set(student.toMap(), SetOptions(merge: true));
   }
 
   Stream<List<StudentModel>> getStudents() {
-    return _db.collection('students').orderBy('createdAt', descending: true).snapshots().map((snapshot) {
-      return snapshot.docs.map((doc) => StudentModel.fromMap(doc.data())).toList();
+    return _db.collection('users').where('role', isEqualTo: 'Student').snapshots().map((snapshot) {
+      final students = snapshot.docs.map((doc) => StudentModel.fromMap(doc.data(), docId: doc.id)).toList();
+      students.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return students;
     });
   }
 
   Future<void> updateStudent(StudentModel student) async {
-    await _db.collection('students').doc(student.id).update(student.toMap());
+    await _db.collection('users').doc(student.id).update(student.toMap());
+    try {
+      await _db.collection('students').doc(student.id).update(student.toMap());
+    } catch (_) {
+      await _db.collection('students').doc(student.id).set(student.toMap(), SetOptions(merge: true));
+    }
   }
 
   Future<void> deleteStudent(String id) async {
-    await _db.collection('students').doc(id).delete();
+    await _db.collection('users').doc(id).delete();
   }
 
   // Routes & Schedules
   Stream<List<BusSchedule>> getBusSchedules() {
     return _db.collection('schedules').snapshots().map((snapshot) {
-      final List<BusSchedule> schedules = snapshot.docs.map((doc) => BusSchedule.fromMap(doc.id, doc.data())).toList();
-      
-      // Check if the default route exists in the list
-      bool defaultExists = schedules.any((s) => s.route == "Abbasia ➔ Baghdad");
-      
-      if (!defaultExists) {
-        // Add default route for UI consistency with student app
-        schedules.insert(0, BusSchedule(
-          id: "default_route_1",
-          route: "Abbasia ➔ Baghdad",
-          from: "Abbasia Campus",
-          to: "Baghdad Campus",
-          stops: ["Abbasia Campus", "Baghdad Campus"],
-          type: "Combined",
-        ));
-      }
-      
-      return schedules;
+      return snapshot.docs.map((doc) => BusSchedule.fromMap(doc.id, doc.data())).toList();
     });
   }
 
@@ -145,10 +168,14 @@ class FirebaseService {
     // 1. Delete from Firestore
     await _db.collection('schedules').doc(id).delete();
     
-    // 2. Delete from Realtime Database
-    await _rtdb.ref('official_routes').child(routeName).remove();
-    // 3. Delete Polyline if exists
-    await _rtdb.ref('custom_polylines').child(routeName).remove();
+    // Check if there are any other schedules with the same route
+    final query = await _db.collection('schedules').where('route', isEqualTo: routeName).limit(1).get();
+    if (query.docs.isEmpty) {
+      // 2. Delete from Realtime Database only if no other schedule uses it
+      await _rtdb.ref('official_routes').child(routeName).remove();
+      // 3. Delete Polyline if exists
+      await _rtdb.ref('custom_polylines').child(routeName).remove();
+    }
   }
 
   // Hub Management (RTDB)
@@ -186,9 +213,12 @@ class FirebaseService {
 
   Stream<List<HubModel>> getHubs() {
     return _rtdb.ref('hubs').onValue.map((event) {
-      final Map<dynamic, dynamic>? data = event.snapshot.value as Map<dynamic, dynamic>?;
-      if (data == null) return [];
-      return data.entries.map((e) => HubModel.fromMap(e.key.toString(), e.value as Map<dynamic, dynamic>)).toList();
+      final data = event.snapshot.value;
+      if (data is! Map) return [];
+      return data.entries.map((e) {
+        final val = e.value;
+        return HubModel.fromMap(e.key.toString(), val is Map ? Map<dynamic, dynamic>.from(val) : {});
+      }).toList();
     });
   }
 
@@ -216,9 +246,12 @@ class FirebaseService {
 
   Stream<List<StopModel>> getStops() {
     return _rtdb.ref('stops').onValue.map((event) {
-      final Map<dynamic, dynamic>? data = event.snapshot.value as Map<dynamic, dynamic>?;
-      if (data == null) return [];
-      return data.entries.map((e) => StopModel.fromMap(e.key.toString(), e.value as Map<dynamic, dynamic>)).toList();
+      final data = event.snapshot.value;
+      if (data is! Map) return [];
+      return data.entries.map((e) {
+        final val = e.value;
+        return StopModel.fromMap(e.key.toString(), val is Map ? Map<dynamic, dynamic>.from(val) : {});
+      }).toList();
     });
   }
 
@@ -245,36 +278,59 @@ class FirebaseService {
 
   Stream<Map<String, dynamic>> getPolylinesStatus() {
     return _rtdb.ref('custom_polylines').onValue.map((event) {
-      final Map<dynamic, dynamic>? data = event.snapshot.value as Map<dynamic, dynamic>?;
-      if (data == null) return {};
+      final data = event.snapshot.value;
+      if (data is! Map) return {};
       return Map<String, dynamic>.from(data);
     });
   }
 
   // Real-time Stats Stream
-  Stream<Map<String, int>> getStatsStream() {
-    return _db.collection('drivers').snapshots().asyncMap((driversSnapshot) async {
-      final studentsSnapshot = await _db.collection('students').get(); // Simplified for now
-      return {
-        'totalDrivers': driversSnapshot.docs.length,
-        'totalStudents': studentsSnapshot.docs.length,
-      };
-    });
+  Stream<Map<String, dynamic>> getStatsStream() {
+    return getRealTimeStats();
   }
   
   // Better version: combine two streams
-  Stream<Map<String, int>> getRealTimeStats() {
+  Stream<Map<String, dynamic>> getRealTimeStats() {
     final driversStream = _db.collection('drivers').snapshots();
-    final studentsStream = _db.collection('students').snapshots();
     
-    // Manual combination
-    return driversStream.map((drivers) => {
-      'drivers': drivers.docs.length
-    }).asyncMap((data) async {
-      final students = await _db.collection('students').get();
+    return driversStream.asyncMap((driversSnapshot) async {
+      // 1. Students count
+      final studentsSnapshot = await _db.collection('users').where('role', isEqualTo: 'Student').get();
+      
+      // 2. Active Trips & Total Revenue
+      final completedTripsSnapshot = await _db.collection('completed_trips').get();
+      double revenue = 0.0;
+      int activeCount = 0;
+      
+      for (var doc in completedTripsSnapshot.docs) {
+        final data = doc.data();
+        final amount = data['revenue'] ?? data['fare'] ?? data['amount'] ?? data['totalPrice'] ?? data['price'] ?? 0;
+        revenue += (amount is num ? amount.toDouble() : 0.0);
+        
+        final status = data['status']?.toString().toLowerCase();
+        if (status == 'active' || status == 'in_progress' || status == 'ongoing' || data['isActive'] == true) {
+          activeCount++;
+        }
+      }
+      
+      if (activeCount == 0) {
+        try {
+          final activeTripsSnapshot = await _db.collection('active_trips').get();
+          activeCount += activeTripsSnapshot.docs.length;
+        } catch (_) {}
+        if (activeCount == 0) {
+          try {
+            final tripsSnapshot = await _db.collection('trips').where('status', isEqualTo: 'active').get();
+            activeCount += tripsSnapshot.docs.length;
+          } catch (_) {}
+        }
+      }
+      
       return {
-        'totalDrivers': data['drivers']!,
-        'totalStudents': students.docs.length,
+        'totalDrivers': driversSnapshot.docs.length,
+        'totalStudents': studentsSnapshot.docs.length,
+        'activeTrips': activeCount,
+        'totalRevenue': revenue,
       };
     });
   }
@@ -297,13 +353,16 @@ class FirebaseService {
 
   Stream<Map<String, String>> getGenderConfigs() {
     return _rtdb.ref('gender_configs').onValue.map((event) {
-      final Map<dynamic, dynamic>? data = event.snapshot.value as Map<dynamic, dynamic>?;
-      if (data == null) return {};
+      final data = event.snapshot.value;
+      if (data is! Map) return {};
       
       final Map<String, String> result = {};
       data.forEach((key, value) {
-        if (value is Map && value.containsKey('color')) {
-          result[key.toString()] = value['color'].toString();
+        if (value is Map) {
+          final color = value['color'];
+          if (color != null) {
+            result[key.toString()] = color.toString();
+          }
         }
       });
       return result;
@@ -326,14 +385,53 @@ class FirebaseService {
   Future<void> updateTicketStatus(String ticketId, String status, {String? reply}) async {
     final Map<String, dynamic> updates = {
       'status': status,
+      'adminRead': true,
     };
     if (reply != null) {
       updates['adminReply'] = reply;
+      updates['userRead'] = false;
     }
     if (status.toLowerCase() == 'resolved' || status.toLowerCase() == 'closed') {
       updates['resolvedAt'] = Timestamp.now();
     }
+    
+    // Update the ticket
     await _db.collection('support_tickets').doc(ticketId).update(updates);
+
+    // If a reply is provided, write a real-time notification to the user's notifications collection
+    if (reply != null && reply.trim().isNotEmpty) {
+      try {
+        final docSnapshot = await _db.collection('support_tickets').doc(ticketId).get();
+        if (docSnapshot.exists) {
+          final data = docSnapshot.data();
+          final String? userId = data?['userId'];
+          final String? userRole = data?['userRole'];
+          
+          if (userId != null && userId.isNotEmpty) {
+            final notificationData = {
+              'title': 'Support Ticket Update',
+              'message': 'Your support query has been resolved: "$reply"',
+              'timestamp': FieldValue.serverTimestamp(),
+              'type': 'support',
+              'isRead': false,
+              'targetRole': userRole ?? 'Student',
+            };
+            
+            // Write to user private notifications subcollection
+            await _db.collection('users').doc(userId).collection('notifications').add(notificationData);
+            
+            // Write to global notifications trigger collection for FCM / functions triggers
+            await _db.collection('notifications').add({
+              ...notificationData,
+              'userId': userId,
+              'ticketId': ticketId,
+            });
+          }
+        }
+      } catch (e) {
+        print('Error generating reply notification: $e');
+      }
+    }
   }
 
   // App Settings / About Info
@@ -374,6 +472,242 @@ class FirebaseService {
 
   Future<void> updateAppInfo(Map<String, dynamic> data) async {
     await _db.collection('app_settings').doc('about').set(data);
+  }
+
+  // Send notification to a specific user (student/driver)
+  Future<void> sendUserNotification({
+    required String userId,
+    required String title,
+    required String message,
+    required String type, // 'info', 'alert', 'system', 'sos_resolved'
+    String? imageUrl,
+    Map<String, dynamic>? extraData,
+  }) async {
+    final timestamp = Timestamp.now();
+    
+    // 1. Save to user private notifications subcollection
+    final payload = {
+      'title': title,
+      'message': message,
+      'timestamp': timestamp,
+      'type': type,
+      'isRead': false,
+      if (imageUrl != null) 'imageUrl': imageUrl,
+      if (extraData != null) ...extraData,
+    };
+    
+    await _db.collection('users').doc(userId).collection('notifications').add(payload);
+    
+    // 2. Log in global admin_notifications for tracking
+    await _db.collection('admin_notifications').add({
+      'title': title,
+      'message': message,
+      'targetAudience': 'Specific User ($userId)',
+      'type': type,
+      'timestamp': timestamp,
+      if (imageUrl != null) 'imageUrl': imageUrl,
+      if (extraData != null) ...extraData,
+    });
+  }
+
+  // Send Custom Broadcast Notifications to Students, Drivers, or All
+  Future<void> sendCustomNotification({
+    required String title,
+    required String message,
+    required String targetAudience, // 'Students', 'Drivers', 'All'
+    required String type, // 'info', 'alert', 'system'
+    String? imageUrl,
+  }) async {
+    final timestamp = Timestamp.now();
+    
+    // 1. Save to global admin_notifications collection
+    final newAlert = {
+      'title': title,
+      'message': message,
+      'targetAudience': targetAudience,
+      'type': type,
+      'timestamp': timestamp,
+      if (imageUrl != null) 'imageUrl': imageUrl,
+    };
+    await _db.collection('admin_notifications').add(newAlert);
+    
+    // 2. Fetch users based on targetAudience
+    Query query = _db.collection('users');
+    if (targetAudience == 'Students') {
+      query = query.where('role', isEqualTo: 'Student');
+    } else if (targetAudience == 'Drivers') {
+      query = query.where('role', isEqualTo: 'Driver');
+    }
+    
+    final usersSnapshot = await query.get();
+    if (usersSnapshot.docs.isNotEmpty) {
+      WriteBatch batch = _db.batch();
+      int operationCount = 0;
+      
+      for (var doc in usersSnapshot.docs) {
+        final notificationRef = _db
+            .collection('users')
+            .doc(doc.id)
+            .collection('notifications')
+            .doc();
+            
+        batch.set(notificationRef, {
+          'title': title,
+          'message': message,
+          'timestamp': timestamp,
+          'type': type,
+          'isRead': false,
+          if (imageUrl != null) 'imageUrl': imageUrl,
+        });
+        
+        operationCount++;
+        // Firestore batch limit is 500
+        if (operationCount >= 450) {
+          await batch.commit();
+          batch = _db.batch();
+          operationCount = 0;
+        }
+      }
+      
+      if (operationCount > 0) {
+        await batch.commit();
+      }
+    }
+  }
+
+  // Get sent admin notifications stream
+  Stream<List<Map<String, dynamic>>> getSentNotifications() {
+    return _db
+        .collection('admin_notifications')
+        .orderBy('timestamp', descending: true)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs.map((doc) {
+        final data = doc.data();
+        return {
+          'id': doc.id,
+          'title': data['title'] ?? '',
+          'message': data['message'] ?? '',
+          'targetAudience': data['targetAudience'] ?? 'All',
+          'type': data['type'] ?? 'info',
+          'imageUrl': data['imageUrl'],
+          'timestamp': (data['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now(),
+        };
+      }).toList();
+    });
+  }
+
+  // Fetch all users eligible for receiving notifications (Students and Drivers)
+  Future<List<Map<String, dynamic>>> getAllNotificationUsers() async {
+    final snapshot = await _db.collection('users').get();
+    return snapshot.docs.where((doc) {
+      final role = (doc.data()['role'] ?? '').toString().toLowerCase();
+      return role == 'student' || role == 'driver';
+    }).map((doc) => {
+      'uid': doc.id,
+      'name': doc.data()['name'] ?? 'Unnamed',
+      'email': doc.data()['email'] ?? '',
+      'role': doc.data()['role'] ?? 'Student',
+    }).toList();
+  }
+
+  // Emergency Alerts (RTDB)
+  Stream<List<Map<String, dynamic>>> getEmergencyAlerts() {
+    return _rtdb.ref('emergency_alerts').onValue.map((event) {
+      final data = event.snapshot.value;
+      if (data is! Map) return [];
+      
+      final List<Map<String, dynamic>> alerts = [];
+      data.forEach((key, value) {
+        if (value is Map) {
+          final alert = Map<String, dynamic>.from(value);
+          alert['id'] = key.toString();
+          alerts.add(alert);
+        }
+      });
+      
+      // Sort by timestamp descending
+      alerts.sort((a, b) {
+        final aTime = a['timestamp'] ?? 0;
+        final bTime = b['timestamp'] ?? 0;
+        return bTime.compareTo(aTime);
+      });
+      
+      return alerts;
+    });
+  }
+
+  Future<void> resolveEmergencyAlert(String id, {String? notes, String? resolvedBy}) async {
+    try {
+      final alertSnapshot = await _rtdb.ref('emergency_alerts').child(id).get();
+      if (alertSnapshot.exists) {
+        final alertData = alertSnapshot.value as Map?;
+        final String? userId = alertData?['userId']?.toString();
+        if (userId != null && userId.isNotEmpty) {
+          await sendUserNotification(
+            userId: userId,
+            title: 'SOS Alert Resolved 🟢',
+            message: 'Admin resolved your SOS: "${notes ?? 'Incident Handled'}". Please rate our assistance.',
+            type: 'sos_resolved',
+            extraData: {
+              'alertId': id,
+              'alertMessage': alertData?['message'] ?? 'Emergency SOS Alert',
+            },
+          );
+        }
+      }
+    } catch (e) {
+      print("Error triggering SOS resolution notification: $e");
+    }
+
+    await _rtdb.ref('emergency_alerts').child(id).update({
+      'status': 'resolved',
+      'resolutionNotes': notes ?? 'Resolved by Admin',
+      'resolvedBy': resolvedBy ?? 'Admin',
+      'resolvedAt': DateTime.now().millisecondsSinceEpoch,
+    });
+  }
+
+  // Trip History (RTDB)
+  Stream<List<Map<String, dynamic>>> getTripHistoryStream() {
+    return _rtdb.ref('driver_trips').onValue.map((event) {
+      final List<Map<String, dynamic>> trips = [];
+      final data = event.snapshot.value;
+      if (data is Map) {
+        data.forEach((driverId, driverTrips) {
+          if (driverTrips is Map) {
+            driverTrips.forEach((tripId, tripData) {
+              if (tripData is Map) {
+                final trip = Map<String, dynamic>.from(tripData);
+                trip['driverId'] = driverId.toString();
+                trip['tripId'] = tripId.toString();
+                trips.add(trip);
+              }
+            });
+          }
+        });
+      }
+      // Sort by startTime descending (newest first)
+      trips.sort((a, b) {
+        final aTime = a['startTime'] ?? 0;
+        final bTime = b['startTime'] ?? 0;
+        return bTime.compareTo(aTime);
+      });
+      return trips;
+    });
+  }
+
+  // Trip Alerts (RTDB)
+  Stream<Map<String, dynamic>> getTripAlertsStream() {
+    return _rtdb.ref('trip_alerts').onChildAdded.map((event) {
+      final value = event.snapshot.value;
+      if (value is Map) {
+        final alert = Map<String, dynamic>.from(value);
+        alert['id'] = event.snapshot.key;
+        return alert;
+      }
+      return {};
+    });
   }
 }
 

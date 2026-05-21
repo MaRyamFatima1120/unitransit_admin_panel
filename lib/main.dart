@@ -17,6 +17,7 @@ import 'package:unitransit_admin/view_models/gender_config_view_model.dart';
 import 'package:unitransit_admin/view_models/support_view_model.dart';
 import 'package:unitransit_admin/view_models/app_settings_view_model.dart';
 import 'package:unitransit_admin/view_models/login_view_model.dart';
+import 'package:unitransit_admin/view_models/notifications_view_model.dart';
 import 'package:unitransit_admin/views/login_screen.dart';
 import 'package:unitransit_admin/views/splash_screen.dart';
 
@@ -64,6 +65,11 @@ void main() async {
         ),
         ChangeNotifierProvider(
           create: (context) => AppSettingsViewModel(
+            Provider.of<FirebaseService>(context, listen: false),
+          ),
+        ),
+        ChangeNotifierProvider(
+          create: (context) => NotificationsViewModel(
             Provider.of<FirebaseService>(context, listen: false),
           ),
         ),

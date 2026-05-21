@@ -17,11 +17,18 @@ class GenderConfigViewModel extends ChangeNotifier {
   bool get isLoading => _isLoading;
 
   void _init() {
-    _subscription = _firebaseService.getGenderConfigs().listen((configs) {
-      _genderConfigs = configs;
-      _isLoading = false;
-      notifyListeners();
-    });
+    _subscription = _firebaseService.getGenderConfigs().listen(
+      (configs) {
+        _genderConfigs = configs;
+        _isLoading = false;
+        notifyListeners();
+      },
+      onError: (error) {
+        debugPrint("Error loading gender configs: $error");
+        _isLoading = false;
+        notifyListeners();
+      },
+    );
   }
 
   Future<void> saveGender(String name, Color color) async {

@@ -9,6 +9,7 @@ class DriverModel {
   final String licenseNumber;
   final DateTime licenseExpiry;
   final String assignedBus;
+  final List<String> assignedRoutes;
   final String experience;
   final String status; // 'Online', 'Offline', 'Busy'
   final String? cnicFrontUrl;
@@ -28,6 +29,7 @@ class DriverModel {
     required this.licenseNumber,
     required this.licenseExpiry,
     required this.assignedBus,
+    this.assignedRoutes = const [],
     required this.experience,
     required this.status,
     this.cnicFrontUrl,
@@ -49,6 +51,7 @@ class DriverModel {
       'licenseNumber': licenseNumber,
       'licenseExpiry': Timestamp.fromDate(licenseExpiry),
       'assignedBus': assignedBus,
+      'assignedRoutes': assignedRoutes,
       'experience': experience,
       'status': status,
       'cnicFrontUrl': cnicFrontUrl,
@@ -71,6 +74,7 @@ class DriverModel {
       licenseNumber: map['licenseNumber'] ?? '',
       licenseExpiry: (map['licenseExpiry'] as Timestamp).toDate(),
       assignedBus: map['assignedBus'] ?? '',
+      assignedRoutes: map['assignedRoutes'] != null ? List<String>.from(map['assignedRoutes']) : const [],
       experience: map['experience'] ?? '',
       status: map['status'] ?? 'Offline',
       cnicFrontUrl: map['cnicFrontUrl'],
@@ -92,6 +96,7 @@ class DriverModel {
     String? licenseNumber,
     DateTime? licenseExpiry,
     String? assignedBus,
+    List<String>? assignedRoutes,
     String? experience,
     String? status,
     String? cnicFrontUrl,
@@ -111,6 +116,7 @@ class DriverModel {
       licenseNumber: licenseNumber ?? this.licenseNumber,
       licenseExpiry: licenseExpiry ?? this.licenseExpiry,
       assignedBus: assignedBus ?? this.assignedBus,
+      assignedRoutes: assignedRoutes ?? this.assignedRoutes,
       experience: experience ?? this.experience,
       status: status ?? this.status,
       cnicFrontUrl: cnicFrontUrl ?? this.cnicFrontUrl,
