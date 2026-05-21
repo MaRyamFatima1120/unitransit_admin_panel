@@ -7,6 +7,8 @@ import 'package:unitransit_admin/models/student_model.dart';
 import 'package:unitransit_admin/core/utils/responsive_util.dart';
 import 'package:unitransit_admin/view_models/dashboard_view_model.dart';
 import 'package:unitransit_admin/view_models/students_view_model.dart';
+import 'package:unitransit_admin/core/utils/animations.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class StudentsScreen extends StatefulWidget {
   const StudentsScreen({super.key});
@@ -27,29 +29,32 @@ class _StudentsScreenState extends State<StudentsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: EdgeInsets.all(AppResponsiveUtil.isMobile(context) ? 16 : 32),
-          child: _buildHeader(context),
-        ),
-        Expanded(
-          child: Container(
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border(top: BorderSide(color: AppColors.borderLight.withOpacity(0.5))),
-            ),
-            child: Column(
-              children: [
-                _buildToolbar(context),
-                Expanded(child: _buildStudentsTable(context)),
-              ],
+    return FadeInSlide(
+      duration: const Duration(milliseconds: 600),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: EdgeInsets.all(AppResponsiveUtil.isMobile(context) ? 16 : 32),
+            child: _buildHeader(context),
+          ),
+          Expanded(
+            child: Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: Border(top: BorderSide(color: AppColors.borderLight.withValues(alpha: 0.5))),
+              ),
+              child: Column(
+                children: [
+                  _buildToolbar(context),
+                  Expanded(child: _buildStudentsTable(context)),
+                ],
+              ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -112,23 +117,27 @@ class _StudentsScreenState extends State<StudentsScreen> {
       stream: firebaseService.getStudents(),
       builder: (context, snapshot) {
         final count = snapshot.hasData ? snapshot.data!.length : 0;
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          decoration: BoxDecoration(
-            color: AppColors.primaryNavy.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: AppColors.primaryNavy.withOpacity(0.2)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.people_outline_rounded, size: 16, color: AppColors.primaryNavy),
-              const SizedBox(width: 8),
-              Text(
-                '$count Students',
-                style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primaryNavy, fontSize: 13),
-              ),
-            ],
+        return FadeInSlide(
+          direction: FadeInDirection.rightToLeft,
+          delay: const Duration(milliseconds: 200),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppColors.primaryNavy.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: AppColors.primaryNavy.withValues(alpha: 0.2)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.people_outline_rounded, size: 16, color: AppColors.primaryNavy),
+                const SizedBox(width: 8),
+                Text(
+                  '$count Students',
+                  style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primaryNavy, fontSize: 13),
+                ),
+              ],
+            ),
           ),
         );
       },
@@ -141,21 +150,33 @@ class _StudentsScreenState extends State<StudentsScreen> {
       padding: const EdgeInsets.all(24),
       child: Column(
         children: [
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: _tabs.map((tab) => _buildTab(tab, viewModel)).toList(),
+          FadeInSlide(
+            direction: FadeInDirection.leftToRight,
+            delay: const Duration(milliseconds: 300),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: _tabs.map((tab) => _buildTab(tab, viewModel)).toList(),
+              ),
             ),
           ),
           const SizedBox(height: 24),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'All Registered Students',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primaryNavy),
+              const FadeInSlide(
+                direction: FadeInDirection.leftToRight,
+                delay: Duration(milliseconds: 400),
+                child: Text(
+                  'All Registered Students',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primaryNavy),
+                ),
               ),
-              _buildAddStudentButton(context, viewModel),
+              FadeInSlide(
+                direction: FadeInDirection.rightToLeft,
+                delay: const Duration(milliseconds: 400),
+                child: _buildAddStudentButton(context, viewModel)
+              ),
             ],
           ),
         ],
@@ -165,23 +186,10 @@ class _StudentsScreenState extends State<StudentsScreen> {
 
   Widget _buildTab(String label, StudentsViewModel viewModel) {
     final bool isSelected = viewModel.selectedTab == label;
-    return InkWell(
+    return _HoverTab(
+      label: label,
+      isSelected: isSelected,
       onTap: () => viewModel.setSelectedTab(label),
-      child: Container(
-        margin: const EdgeInsets.only(right: 24),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? AppColors.primaryNavy : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isSelected ? Colors.white : Colors.grey.shade600,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-          ),
-        ),
-      ),
     );
   }
 
@@ -196,7 +204,7 @@ class _StudentsScreenState extends State<StudentsScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         elevation: 2,
-        shadowColor: AppColors.primaryNavy.withOpacity(0.3),
+        shadowColor: AppColors.primaryNavy.withValues(alpha: 0.3),
       ),
     );
   }
@@ -214,62 +222,75 @@ class _StudentsScreenState extends State<StudentsScreen> {
           child: SingleChildScrollView(
             controller: _horizontalScrollController,
             scrollDirection: Axis.horizontal,
-            child: Container(
-              width: constraints.maxWidth > 1550 + 48 ? constraints.maxWidth - 48 : 1550,
-              margin: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20, offset: const Offset(0, 10)),
-                ],
-              ),
-              child: Column(
-                children: [
-                  _buildTableHeader(),
-                  const Divider(height: 1),
-                  StreamBuilder<List<StudentModel>>(
-                    stream: firebaseService.getStudents(),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const SizedBox(height: 300, child: Center(child: CircularProgressIndicator()));
-                      }
-                      if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                        return const SizedBox(height: 300, child: Center(child: Text('No students found.', style: TextStyle(color: Colors.grey))));
-                      }
-
-                      var students = snapshot.data!;
-                      if (viewModel.selectedTab != 'All') {
-                        students = students.where((s) {
-                          if (viewModel.selectedTab == 'Active') return (s.status == 'Online' || s.status == 'Active') && !s.isBlocked;
-                          if (viewModel.selectedTab == 'Inactive') return (s.status == 'Offline' || s.status == 'Inactive') && !s.isBlocked;
-                          if (viewModel.selectedTab == 'Blocked') return s.isBlocked;
-                          return true;
-                        }).toList();
-                      }
-
-                      final searchQuery = dashboardViewModel.searchQuery;
-                      if (searchQuery.isNotEmpty) {
-                        students = students.where((s) =>
-                          s.name.toLowerCase().contains(searchQuery.toLowerCase()) ||
-                          s.email.toLowerCase().contains(searchQuery.toLowerCase()) ||
-                          s.studentId.toLowerCase().contains(searchQuery.toLowerCase()) ||
-                          s.regNo.toLowerCase().contains(searchQuery.toLowerCase()) ||
-                          s.department.toLowerCase().contains(searchQuery.toLowerCase()) ||
-                          s.phoneNumber.contains(searchQuery)).toList();
-                      }
-
-                      return ListView.separated(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        padding: EdgeInsets.zero,
-                        itemCount: students.length,
-                        separatorBuilder: (context, index) => Divider(height: 1, color: Colors.grey.shade100),
-                        itemBuilder: (context, index) => _buildStudentRow(students[index]),
-                      );
-                    },
+            child: SingleChildScrollView(
+              child: FadeInSlide(
+                direction: FadeInDirection.bottomToTop,
+                delay: const Duration(milliseconds: 500),
+                child: Container(
+                  width: constraints.maxWidth > 1550 + 48 ? constraints.maxWidth - 48 : 1550,
+                  margin: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 20, offset: const Offset(0, 10)),
+                    ],
                   ),
-                ],
+                  child: Column(
+                    children: [
+                      _buildTableHeader(),
+                      const Divider(height: 1),
+                      StreamBuilder<List<StudentModel>>(
+                        stream: firebaseService.getStudents(),
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState == ConnectionState.waiting) {
+                            return const SizedBox(height: 300, child: Center(child: CircularProgressIndicator()));
+                          }
+                          if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                            return const SizedBox(height: 300, child: Center(child: Text('No students found.', style: TextStyle(color: Colors.grey))));
+                          }
+
+                          var students = snapshot.data!;
+                          if (viewModel.selectedTab != 'All') {
+                            students = students.where((s) {
+                              if (viewModel.selectedTab == 'Active') return (s.status == 'Online' || s.status == 'Active') && !s.isBlocked;
+                              if (viewModel.selectedTab == 'Inactive') return (s.status == 'Offline' || s.status == 'Inactive') && !s.isBlocked;
+                              if (viewModel.selectedTab == 'Blocked') return s.isBlocked;
+                              return true;
+                            }).toList();
+                          }
+
+                          final searchQuery = dashboardViewModel.searchQuery;
+                          if (searchQuery.isNotEmpty) {
+                            students = students.where((s) =>
+                              s.name.toLowerCase().contains(searchQuery.toLowerCase()) ||
+                              s.email.toLowerCase().contains(searchQuery.toLowerCase()) ||
+                              s.studentId.toLowerCase().contains(searchQuery.toLowerCase()) ||
+                              s.regNo.toLowerCase().contains(searchQuery.toLowerCase()) ||
+                              s.department.toLowerCase().contains(searchQuery.toLowerCase()) ||
+                              s.phoneNumber.contains(searchQuery)).toList();
+                          }
+
+                          return ListView.separated(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            padding: EdgeInsets.zero,
+                            itemCount: students.length,
+                            separatorBuilder: (context, index) => Divider(height: 1, color: Colors.grey.shade100),
+                            itemBuilder: (context, index) => _StudentRow(
+                              student: students[index], 
+                              viewModel: viewModel,
+                              onView: (s) => _showViewStudentDialog(context, s),
+                              onEdit: (s) => _showEditStudentDialog(context, viewModel, s),
+                              onDelete: (s) => _showDeleteConfirmation(context, viewModel, s),
+                              onSendNotification: (s) => _showSendNotificationDialog(context, s.id, s.name),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
@@ -282,7 +303,7 @@ class _StudentsScreenState extends State<StudentsScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
       decoration: BoxDecoration(
-        color: AppColors.primaryNavy.withOpacity(0.02),
+        color: AppColors.primaryNavy.withValues(alpha: 0.02),
         borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
       ),
       child: const Row(
@@ -299,175 +320,6 @@ class _StudentsScreenState extends State<StudentsScreen> {
     );
   }
 
-  Widget _buildStudentRow(StudentModel student) {
-    final viewModel = context.watch<StudentsViewModel>();
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-      child: Row(
-        children: [
-          // Student Info
-          Expanded(
-            flex: 3,
-            child: Row(
-              children: [
-                CircleAvatar(
-                  radius: 20,
-                  backgroundColor: AppColors.primaryNavy.withOpacity(0.1),
-                  backgroundImage: student.profileImage.isNotEmpty ? NetworkImage(student.profileImage) : null,
-                  child: student.profileImage.isEmpty
-                      ? Text(
-                          student.name.isNotEmpty ? student.name[0].toUpperCase() : '?',
-                          style: const TextStyle(color: AppColors.primaryNavy, fontWeight: FontWeight.bold),
-                        )
-                      : null,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(student.name.isNotEmpty ? student.name : 'Unknown Student', overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.textDark)),
-                      if (student.email.isNotEmpty) ...[
-                        const SizedBox(height: 2),
-                        Text(student.email, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
-                      ],
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // Roll Number
-          Expanded(flex: 2, child: Text(student.studentId, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
-          // Reg Number
-          Expanded(flex: 2, child: Text(student.regNo, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary))),
-          // Department
-          Expanded(
-            flex: 2, 
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(student.department, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12)),
-                if (student.semester.isNotEmpty && student.semester != 'N/A') ...[
-                  const SizedBox(height: 2),
-                  Text(student.semester, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
-                ],
-              ],
-            ),
-          ),
-          // Phone
-          Expanded(flex: 2, child: Text(student.phoneNumber, style: const TextStyle(fontSize: 12))),
-          // Status
-          Expanded(
-            flex: 2,
-            child: _buildStatusBadge(
-              isBlocked: student.isBlocked,
-              status: student.status,
-            ),
-          ),
-          // Actions
-          Expanded(
-            flex: 3,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                  _buildIconButton(Icons.visibility_outlined, AppColors.primaryNavy, () => _showViewStudentDialog(context, student), tooltip: 'View Student'),
-                  const SizedBox(width: 4),
-                  _buildIconButton(Icons.edit_outlined, AppColors.primaryNavy, () => _showEditStudentDialog(context, viewModel, student), tooltip: 'Edit Student'),
-                  const SizedBox(width: 4),
-                  _buildIconButton(Icons.lock_reset, Colors.orange, () {
-                    context.read<FirebaseService>().resetStudentPassword(student.email);
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Password reset email sent.')));
-                  }, tooltip: 'Reset Password'),
-                  const SizedBox(width: 4),
-                  _buildIconButton(
-                    student.isBlocked ? Icons.lock_open_outlined : Icons.block_outlined, 
-                    student.isBlocked ? Colors.green : Colors.red, 
-                    () => viewModel.updateStudent(student.copyWith(isBlocked: !student.isBlocked)),
-                    tooltip: student.isBlocked ? 'Unblock Student' : 'Block Student',
-                  ),
-                  const SizedBox(width: 4),
-                  _buildIconButton(Icons.message_outlined, Colors.blue, () => _showSendNotificationDialog(context, student.id, student.name), tooltip: 'Send Notification'),
-                  const SizedBox(width: 4),
-                  _buildIconButton(Icons.delete_outline, Colors.red, () => _showDeleteConfirmation(context, viewModel, student), tooltip: 'Delete Student'),
-                ],
-              ),
-            ),
-          ],
-        ),
-    );
-  }
-
-  Widget _buildIconButton(IconData icon, Color color, VoidCallback onTap, {String? tooltip}) {
-    Widget button = InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.08),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Icon(icon, size: 18, color: color),
-      ),
-    );
-    if (tooltip != null) {
-      button = Tooltip(message: tooltip, child: button);
-    }
-    return button;
-  }
-
-  Widget _buildStatusBadge({required bool isBlocked, required String status}) {
-    final Color bgColor;
-    final Color textColor;
-    final Color dotColor;
-    final String label;
-    final IconData dotIcon;
-
-    if (isBlocked) {
-      bgColor = Colors.red.withOpacity(0.1);
-      textColor = Colors.red.shade700;
-      dotColor = Colors.red;
-      label = 'Blocked';
-      dotIcon = Icons.block_rounded;
-    } else if (status == 'Online' || status == 'Active') {
-      bgColor = Colors.green.withOpacity(0.1);
-      textColor = Colors.green.shade700;
-      dotColor = Colors.green;
-      label = 'Online';
-      dotIcon = Icons.circle;
-    } else {
-      bgColor = Colors.grey.withOpacity(0.1);
-      textColor = Colors.grey.shade600;
-      dotColor = Colors.grey.shade400;
-      label = 'Offline';
-      dotIcon = Icons.circle;
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: dotColor.withOpacity(0.3)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(dotIcon, size: 8, color: dotColor),
-          const SizedBox(width: 5),
-          Text(
-            label,
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: textColor),
-          ),
-        ],
-      ),
-    );
-  }
-
-
   void _showViewStudentDialog(BuildContext context, StudentModel student) {
     showDialog(
       context: context,
@@ -480,12 +332,11 @@ class _StudentsScreenState extends State<StudentsScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header with Avatar, Name, Role Badge
               Row(
                 children: [
                   CircleAvatar(
                     radius: 36,
-                    backgroundColor: AppColors.primaryNavy.withOpacity(0.1),
+                    backgroundColor: AppColors.primaryNavy.withValues(alpha: 0.1),
                     backgroundImage: student.profileImage.isNotEmpty ? NetworkImage(student.profileImage) : null,
                     child: student.profileImage.isEmpty
                         ? Text(
@@ -507,7 +358,7 @@ class _StudentsScreenState extends State<StudentsScreen> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
-                            color: AppColors.primaryNavy.withOpacity(0.1),
+                            color: AppColors.primaryNavy.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: const Text(
@@ -525,26 +376,18 @@ class _StudentsScreenState extends State<StudentsScreen> {
                 ],
               ),
               const SizedBox(height: 32),
-
-              // Academic Identity Section
               _buildSectionTitle("ACADEMIC IDENTITY"),
               const SizedBox(height: 16),
               _buildDetailTile(Icons.school_rounded, "University Department", student.department),
               _buildDetailTile(Icons.badge_rounded, "Roll Number / ID", student.studentId),
               _buildDetailTile(Icons.assignment_ind_rounded, "Registration Number", student.regNo),
               _buildDetailTile(Icons.layers_rounded, "Semester", student.semester),
-
               const SizedBox(height: 24),
-
-              // Communication Section
               _buildSectionTitle("COMMUNICATION"),
               const SizedBox(height: 16),
               _buildDetailTile(Icons.email_rounded, "Academic Email", student.email.isNotEmpty ? student.email : "Not Provided"),
               _buildDetailTile(Icons.phone_android_rounded, "Phone Number", student.phoneNumber),
-
               const SizedBox(height: 24),
-
-              // Status & Security Section
               _buildSectionTitle("STATUS & SECURITY"),
               const SizedBox(height: 16),
               _buildDetailTile(Icons.online_prediction_rounded, "Account Status", student.isBlocked ? "Suspended" : student.status, valueColor: student.isBlocked ? Colors.red : (student.status == 'Online' || student.status == 'Active' ? Colors.green : Colors.grey)),
@@ -584,7 +427,7 @@ class _StudentsScreenState extends State<StudentsScreen> {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: AppColors.primaryNavy.withOpacity(0.08),
+              color: AppColors.primaryNavy.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(icon, color: AppColors.primaryNavy, size: 20),
@@ -609,63 +452,15 @@ class _StudentsScreenState extends State<StudentsScreen> {
   }
 
   final List<String> _departments = const [
-    'BS Computer Science',
-    'BS Software Engineering',
-    'BS Information Technology',
-    'BS Electrical Engineering',
-    'BS Mechanical Engineering',
-    'BS Civil Engineering',
-    'BBA (Business Administration)',
-    'BS Mathematics',
-    'BS Physics',
-    'BS Chemistry',
-    'Other'
+    'BS Computer Science', 'BS Software Engineering', 'BS Information Technology',
+    'BS Electrical Engineering', 'BS Mechanical Engineering', 'BS Civil Engineering',
+    'BBA (Business Administration)', 'BS Mathematics', 'BS Physics', 'BS Chemistry', 'Other'
   ];
 
   final List<String> _semesters = const [
-    '1st Semester',
-    '2nd Semester',
-    '3rd Semester',
-    '4th Semester',
-    '5th Semester',
-    '6th Semester',
-    '7th Semester',
-    '8th Semester',
+    '1st Semester', '2nd Semester', '3rd Semester', '4th Semester',
+    '5th Semester', '6th Semester', '7th Semester', '8th Semester',
   ];
-
-  Widget _buildDropdownField({
-    required String label,
-    required String? value,
-    required IconData icon,
-    required List<String> baseItems,
-    required ValueChanged<String?> onChanged,
-  }) {
-    final Set<String> itemsSet = Set.from(baseItems);
-    if (value != null && value.isNotEmpty) {
-      itemsSet.add(value);
-    }
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: DropdownButtonFormField<String>(
-        value: value,
-        decoration: InputDecoration(
-          labelText: label,
-          prefixIcon: Icon(icon, size: 20, color: AppColors.primaryNavy),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        ),
-        items: itemsSet.map((val) {
-          return DropdownMenuItem<String>(
-            value: val,
-            child: Text(val),
-          );
-        }).toList(),
-        onChanged: onChanged,
-        validator: (value) => value == null || value.isEmpty ? 'Required' : null,
-      ),
-    );
-  }
 
   void _showAddStudentDialog(BuildContext context, StudentsViewModel viewModel) {
     final formKey = GlobalKey<FormState>();
@@ -674,7 +469,6 @@ class _StudentsScreenState extends State<StudentsScreen> {
     final studentIdController = TextEditingController();
     final regNoController = TextEditingController();
     final phoneController = TextEditingController();
-
     String? selectedDept;
     String? selectedSemester;
 
@@ -694,28 +488,8 @@ class _StudentsScreenState extends State<StudentsScreen> {
                   _buildTextField(emailController, 'Academic Email', Icons.email, keyboardType: TextInputType.emailAddress),
                   _buildTextField(studentIdController, 'Roll Number / ID', Icons.badge),
                   _buildTextField(regNoController, 'Registration Number', Icons.assignment_ind),
-                  _buildDropdownField(
-                    label: 'Program / Department',
-                    value: selectedDept,
-                    icon: Icons.school,
-                    baseItems: _departments,
-                    onChanged: (val) {
-                      setDialogState(() {
-                        selectedDept = val;
-                      });
-                    },
-                  ),
-                  _buildDropdownField(
-                    label: 'Semester',
-                    value: selectedSemester,
-                    icon: Icons.layers,
-                    baseItems: _semesters,
-                    onChanged: (val) {
-                      setDialogState(() {
-                        selectedSemester = val;
-                      });
-                    },
-                  ),
+                  _buildDropdownField(label: 'Program / Department', value: selectedDept, icon: Icons.school, baseItems: _departments, onChanged: (val) => setDialogState(() => selectedDept = val)),
+                  _buildDropdownField(label: 'Semester', value: selectedSemester, icon: Icons.layers, baseItems: _semesters, onChanged: (val) => setDialogState(() => selectedSemester = val)),
                   Padding(
                     padding: const EdgeInsets.only(bottom: 16),
                     child: IntlPhoneField(
@@ -726,15 +500,7 @@ class _StudentsScreenState extends State<StudentsScreen> {
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       ),
-                      onChanged: (phone) {
-                        phoneController.text = phone.completeNumber;
-                      },
-                      validator: (phone) {
-                        if (phone == null || phone.completeNumber.isEmpty) {
-                          return 'Phone number required';
-                        }
-                        return null;
-                      },
+                      onChanged: (phone) => phoneController.text = phone.completeNumber,
                     ),
                   ),
                 ],
@@ -743,29 +509,15 @@ class _StudentsScreenState extends State<StudentsScreen> {
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-            ValueListenableBuilder(
-              valueListenable: ValueNotifier(viewModel.isSaving),
-              builder: (context, _, __) {
-                final isSaving = context.select<StudentsViewModel, bool>((v) => v.isSaving);
-                return ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryNavy, foregroundColor: Colors.white),
-                  onPressed: isSaving ? null : () async {
-                    if (formKey.currentState!.validate()) {
-                      await viewModel.addStudent(
-                        name: nameController.text,
-                        email: emailController.text,
-                        studentId: studentIdController.text,
-                        regNo: regNoController.text,
-                        department: selectedDept ?? '',
-                        semester: selectedSemester ?? '',
-                        phone: phoneController.text,
-                      );
-                      if (context.mounted) Navigator.pop(context);
-                    }
-                  },
-                  child: isSaving ? const CircularProgressIndicator() : const Text('Add Student'),
-                );
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryNavy, foregroundColor: Colors.white),
+              onPressed: () async {
+                if (formKey.currentState!.validate()) {
+                  await viewModel.addStudent(name: nameController.text, email: emailController.text, studentId: studentIdController.text, regNo: regNoController.text, department: selectedDept ?? '', semester: selectedSemester ?? '', phone: phoneController.text);
+                  if (context.mounted) Navigator.pop(context);
+                }
               },
+              child: const Text('Add Student'),
             ),
           ],
         ),
@@ -780,20 +532,8 @@ class _StudentsScreenState extends State<StudentsScreen> {
     final studentIdController = TextEditingController(text: student.studentId);
     final regNoController = TextEditingController(text: student.regNo);
     final phoneController = TextEditingController(text: student.phoneNumber);
-
     String? selectedDept = student.department;
     String? selectedSemester = student.semester;
-
-    // Parse country code for PK (+92)
-    String initialCountryCode = 'PK';
-    String initialPhoneNumber = student.phoneNumber;
-    if (initialPhoneNumber.startsWith('+92')) {
-      initialCountryCode = 'PK';
-      initialPhoneNumber = initialPhoneNumber.substring(3);
-    } else if (initialPhoneNumber.startsWith('03')) {
-      initialCountryCode = 'PK';
-      initialPhoneNumber = initialPhoneNumber.substring(1);
-    }
 
     showDialog(
       context: context,
@@ -811,48 +551,20 @@ class _StudentsScreenState extends State<StudentsScreen> {
                   _buildTextField(emailController, 'Academic Email', Icons.email, keyboardType: TextInputType.emailAddress),
                   _buildTextField(studentIdController, 'Roll Number / ID', Icons.badge),
                   _buildTextField(regNoController, 'Registration Number', Icons.assignment_ind),
-                  _buildDropdownField(
-                    label: 'Program / Department',
-                    value: selectedDept,
-                    icon: Icons.school,
-                    baseItems: _departments,
-                    onChanged: (val) {
-                      setDialogState(() {
-                        selectedDept = val;
-                      });
-                    },
-                  ),
-                  _buildDropdownField(
-                    label: 'Semester',
-                    value: selectedSemester,
-                    icon: Icons.layers,
-                    baseItems: _semesters,
-                    onChanged: (val) {
-                      setDialogState(() {
-                        selectedSemester = val;
-                      });
-                    },
-                  ),
+                  _buildDropdownField(label: 'Program / Department', value: selectedDept, icon: Icons.school, baseItems: _departments, onChanged: (val) => setDialogState(() => selectedDept = val)),
+                  _buildDropdownField(label: 'Semester', value: selectedSemester, icon: Icons.layers, baseItems: _semesters, onChanged: (val) => setDialogState(() => selectedSemester = val)),
                   Padding(
                     padding: const EdgeInsets.only(bottom: 16),
                     child: IntlPhoneField(
-                      initialCountryCode: initialCountryCode,
-                      initialValue: initialPhoneNumber,
+                      initialCountryCode: 'PK',
+                      initialValue: student.phoneNumber.replaceFirst('+92', ''),
                       decoration: InputDecoration(
                         labelText: 'Phone Number',
                         prefixIcon: const Icon(Icons.phone, size: 20, color: AppColors.primaryNavy),
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       ),
-                      onChanged: (phone) {
-                        phoneController.text = phone.completeNumber;
-                      },
-                      validator: (phone) {
-                        if (phone == null || phone.completeNumber.isEmpty) {
-                          return 'Phone number required';
-                        }
-                        return null;
-                      },
+                      onChanged: (phone) => phoneController.text = phone.completeNumber,
                     ),
                   ),
                 ],
@@ -865,15 +577,7 @@ class _StudentsScreenState extends State<StudentsScreen> {
               style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryNavy, foregroundColor: Colors.white),
               onPressed: () async {
                 if (formKey.currentState!.validate()) {
-                  await viewModel.updateStudent(student.copyWith(
-                    name: nameController.text,
-                    email: emailController.text,
-                    studentId: studentIdController.text,
-                    regNo: regNoController.text,
-                    department: selectedDept ?? '',
-                    semester: selectedSemester ?? '',
-                    phoneNumber: phoneController.text,
-                  ));
+                  await viewModel.updateStudent(student.copyWith(name: nameController.text, email: emailController.text, studentId: studentIdController.text, regNo: regNoController.text, department: selectedDept ?? '', semester: selectedSemester ?? '', phoneNumber: phoneController.text));
                   if (context.mounted) Navigator.pop(context);
                 }
               },
@@ -890,38 +594,11 @@ class _StudentsScreenState extends State<StudentsScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(
-          children: [
-            Icon(Icons.warning_rounded, color: Colors.red, size: 28),
-            SizedBox(width: 12),
-            Text("Delete Student?", style: TextStyle(fontWeight: FontWeight.bold)),
-          ],
-        ),
-        content: Text(
-          "Are you sure you want to permanently delete the profile for ${student.name} (${student.studentId})? This action cannot be undone.",
-          style: const TextStyle(fontSize: 16),
-        ),
+        title: const Row(children: [Icon(Icons.warning_rounded, color: Colors.red, size: 28), SizedBox(width: 12), Text("Delete Student?", style: TextStyle(fontWeight: FontWeight.bold))]),
+        content: Text("Are you sure you want to permanently delete the profile for ${student.name}? This action cannot be undone."),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            style: TextButton.styleFrom(foregroundColor: Colors.grey.shade700),
-            child: const Text("Cancel", style: TextStyle(fontWeight: FontWeight.bold)),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              viewModel.deleteStudent(student.id);
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Student deleted successfully.')),
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-            child: const Text("Delete Permanently"),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
+          ElevatedButton(onPressed: () { viewModel.deleteStudent(student.id); Navigator.pop(ctx); }, style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white), child: const Text("Delete Permanently")),
         ],
       ),
     );
@@ -935,84 +612,37 @@ class _StudentsScreenState extends State<StudentsScreen> {
 
     showDialog(
       context: context,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return AlertDialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              title: Text('Send Notification to $userName', style: const TextStyle(fontWeight: FontWeight.bold)),
-              content: Form(
-                key: formKey,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextFormField(
-                      controller: titleController,
-                      enabled: !isSending,
-                      decoration: InputDecoration(
-                        labelText: 'Title',
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                      validator: (v) => (v == null || v.trim().isEmpty) ? 'Title is required' : null,
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: messageController,
-                      enabled: !isSending,
-                      maxLines: 3,
-                      decoration: InputDecoration(
-                        labelText: 'Message',
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                      validator: (v) => (v == null || v.trim().isEmpty) ? 'Message is required' : null,
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: isSending ? null : () => Navigator.pop(dialogContext),
-                  child: const Text('Cancel'),
-                ),
-                ElevatedButton(
-                  onPressed: isSending ? null : () async {
-                    if (formKey.currentState!.validate()) {
-                      setModalState(() => isSending = true);
-                      final navigator = Navigator.of(dialogContext);
-                      final messenger = ScaffoldMessenger.of(context);
-                      final firebaseService = context.read<FirebaseService>();
-                      try {
-                        await firebaseService.sendUserNotification(
-                          userId: userId,
-                          title: titleController.text.trim(),
-                          message: messageController.text.trim(),
-                          type: 'info',
-                        );
-                        navigator.pop();
-                        messenger.showSnackBar(
-                          const SnackBar(content: Text('Notification sent successfully!'), backgroundColor: Colors.green),
-                        );
-                      } catch (e) {
-                        setModalState(() => isSending = false);
-                        messenger.showSnackBar(
-                          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-                        );
-                      }
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryNavy,
-                    foregroundColor: Colors.white,
-                  ),
-                  child: isSending
-                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                      : const Text('Send'),
-                ),
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setModalState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text('Send Notification to $userName'),
+          content: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildTextField(titleController, 'Title', Icons.title),
+                _buildTextField(messageController, 'Message', Icons.message, action: TextInputAction.done),
               ],
-            );
-          },
-        );
-      },
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: isSending ? null : () async {
+                if (formKey.currentState!.validate()) {
+                  setModalState(() => isSending = true);
+                  try {
+                    await context.read<FirebaseService>().sendUserNotification(userId: userId, title: titleController.text.trim(), message: messageController.text.trim(), type: 'info');
+                    if (context.mounted) Navigator.pop(dialogContext);
+                  } catch (e) { setModalState(() => isSending = false); }
+                }
+              },
+              child: isSending ? const CircularProgressIndicator() : const Text('Send'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1032,5 +662,126 @@ class _StudentsScreenState extends State<StudentsScreen> {
         validator: (value) => value == null || value.isEmpty ? 'Required' : null,
       ),
     );
+  }
+
+  Widget _buildDropdownField({required String label, required String? value, required IconData icon, required List<String> baseItems, required ValueChanged<String?> onChanged}) {
+    final Set<String> itemsSet = Set.from(baseItems);
+    if (value != null && value.isNotEmpty) itemsSet.add(value);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: DropdownButtonFormField<String>(
+        value: value,
+        decoration: InputDecoration(labelText: label, prefixIcon: Icon(icon, size: 20, color: AppColors.primaryNavy), border: OutlineInputBorder(borderRadius: BorderRadius.circular(10))),
+        items: itemsSet.map((val) => DropdownMenuItem<String>(value: val, child: Text(val))).toList(),
+        onChanged: onChanged,
+        validator: (value) => value == null || value.isEmpty ? 'Required' : null,
+      ),
+    );
+  }
+}
+
+class _HoverTab extends StatefulWidget {
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+  const _HoverTab({required this.label, required this.isSelected, required this.onTap});
+  @override
+  State<_HoverTab> createState() => _HoverTabState();
+}
+
+class _HoverTabState extends State<_HoverTab> {
+  bool _isHovered = false;
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: InkWell(
+        onTap: widget.onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          margin: const EdgeInsets.only(right: 24),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(color: widget.isSelected ? AppColors.primaryNavy : (_isHovered ? AppColors.primaryNavy.withValues(alpha: 0.05) : Colors.transparent), borderRadius: BorderRadius.circular(8)),
+          child: Text(widget.label, style: TextStyle(color: widget.isSelected ? Colors.white : (_isHovered ? AppColors.primaryNavy : Colors.grey.shade600), fontWeight: widget.isSelected ? FontWeight.bold : FontWeight.normal)),
+        ),
+      ),
+    );
+  }
+}
+
+class _StudentRow extends StatefulWidget {
+  final StudentModel student;
+  final StudentsViewModel viewModel;
+  final Function(StudentModel) onView, onEdit, onDelete, onSendNotification;
+  const _StudentRow({required this.student, required this.viewModel, required this.onView, required this.onEdit, required this.onDelete, required this.onSendNotification});
+  @override
+  State<_StudentRow> createState() => _StudentRowState();
+}
+
+class _StudentRowState extends State<_StudentRow> {
+  bool _isHovered = false;
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.student;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        decoration: BoxDecoration(color: _isHovered ? AppColors.primaryNavy.withValues(alpha: 0.02) : Colors.transparent),
+        child: Row(
+          children: [
+            Expanded(flex: 3, child: Row(children: [AnimatedScale(scale: _isHovered ? 1.1 : 1.0, duration: const Duration(milliseconds: 200), child: CircleAvatar(radius: 20, backgroundColor: AppColors.primaryNavy.withValues(alpha: 0.1), backgroundImage: s.profileImage.isNotEmpty ? NetworkImage(s.profileImage) : null, child: s.profileImage.isEmpty ? Text(s.name.isNotEmpty ? s.name[0].toUpperCase() : '?', style: const TextStyle(color: AppColors.primaryNavy, fontWeight: FontWeight.bold)) : null)), const SizedBox(width: 12), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(s.name, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: _isHovered ? AppColors.primaryNavy : AppColors.textDark)), Text(s.email, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary))]))])),
+            Expanded(flex: 2, child: Text(s.studentId, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
+            Expanded(flex: 2, child: Text(s.regNo, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary))),
+            Expanded(flex: 2, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(s.department, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12)), Text(s.semester, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary))])),
+            Expanded(flex: 2, child: Text(s.phoneNumber, style: const TextStyle(fontSize: 12))),
+            Expanded(flex: 2, child: _buildStatusBadge(isBlocked: s.isBlocked, status: s.status)),
+            Expanded(flex: 3, child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+              _ActionIconButton(icon: Icons.visibility_outlined, color: AppColors.primaryNavy, onTap: () => widget.onView(s), tooltip: 'View'),
+              const SizedBox(width: 4),
+              _ActionIconButton(icon: Icons.edit_outlined, color: AppColors.primaryNavy, onTap: () => widget.onEdit(s), tooltip: 'Edit'),
+              const SizedBox(width: 4),
+              _ActionIconButton(icon: Icons.lock_reset, color: Colors.orange, onTap: () => context.read<FirebaseService>().resetStudentPassword(s.email), tooltip: 'Reset'),
+              const SizedBox(width: 4),
+              _ActionIconButton(icon: s.isBlocked ? Icons.lock_open : Icons.block, color: s.isBlocked ? Colors.green : Colors.red, onTap: () => widget.viewModel.updateStudent(s.copyWith(isBlocked: !s.isBlocked)), tooltip: s.isBlocked ? 'Unblock' : 'Block'),
+              const SizedBox(width: 4),
+              _ActionIconButton(icon: Icons.message, color: Colors.blue, onTap: () => widget.onSendNotification(s), tooltip: 'Notify'),
+              const SizedBox(width: 4),
+              _ActionIconButton(icon: Icons.delete_outline, color: Colors.red, onTap: () => widget.onDelete(s), tooltip: 'Delete'),
+            ])),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatusBadge({required bool isBlocked, required String status}) {
+    final isOnline = status == 'Online' || status == 'Active';
+    final Color color = isBlocked ? Colors.red : (isOnline ? Colors.green : Colors.grey);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(20), border: Border.all(color: color.withValues(alpha: 0.3))),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(isBlocked ? Icons.block : Icons.circle, size: 8, color: color), const SizedBox(width: 5), Text(isBlocked ? 'Blocked' : (isOnline ? 'Online' : 'Offline'), style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: color))]),
+    );
+  }
+}
+
+class _ActionIconButton extends StatefulWidget {
+  final IconData icon; final Color color; final VoidCallback onTap; final String? tooltip;
+  const _ActionIconButton({required this.icon, required this.color, required this.onTap, this.tooltip});
+  @override
+  State<_ActionIconButton> createState() => _ActionIconButtonState();
+}
+
+class _ActionIconButtonState extends State<_ActionIconButton> {
+  bool _isHovered = false;
+  @override
+  Widget build(BuildContext context) {
+    Widget b = MouseRegion(onEnter: (_) => setState(() => _isHovered = true), onExit: (_) => setState(() => _isHovered = false), child: InkWell(onTap: widget.onTap, borderRadius: BorderRadius.circular(8), child: AnimatedContainer(duration: const Duration(milliseconds: 200), padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: _isHovered ? widget.color : widget.color.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(8)), child: Icon(widget.icon, size: 18, color: _isHovered ? Colors.white : widget.color))));
+    return widget.tooltip != null ? Tooltip(message: widget.tooltip, child: b) : b;
   }
 }

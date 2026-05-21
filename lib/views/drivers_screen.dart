@@ -11,6 +11,7 @@ import 'package:unitransit_admin/view_models/dashboard_view_model.dart';
 import 'package:unitransit_admin/view_models/drivers_view_model.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:unitransit_admin/models/bus_schedule_model.dart';
+import 'package:unitransit_admin/core/utils/animations.dart';
 
 class DriversScreen extends StatefulWidget {
   const DriversScreen({super.key});
@@ -35,30 +36,32 @@ class _DriversScreenState extends State<DriversScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Optimization: Using Selector to only rebuild when search or tab changes
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: EdgeInsets.all(AppResponsiveUtil.isMobile(context) ? 16 : 32),
-          child: _buildHeader(context),
-        ),
-        Expanded(
-          child: Container(
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border(top: BorderSide(color: AppColors.borderLight.withOpacity(0.5))),
-            ),
-            child: Column(
-              children: [
-                _buildToolbar(context),
-                Expanded(child: _buildDriversTable(context)),
-              ],
+    return FadeInSlide(
+      duration: const Duration(milliseconds: 600),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: EdgeInsets.all(AppResponsiveUtil.isMobile(context) ? 16 : 32),
+            child: _buildHeader(context),
+          ),
+          Expanded(
+            child: Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: Border(top: BorderSide(color: AppColors.borderLight.withValues(alpha: 0.5))),
+              ),
+              child: Column(
+                children: [
+                  _buildToolbar(context),
+                  Expanded(child: _buildDriversTable(context)),
+                ],
+              ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -121,17 +124,33 @@ class _DriversScreenState extends State<DriversScreen> {
       padding: const EdgeInsets.all(24),
       child: Column(
         children: [
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: _tabs.map((tab) => _buildTab(tab, viewModel)).toList(),
+          FadeInSlide(
+            direction: FadeInDirection.leftToRight,
+            delay: const Duration(milliseconds: 300),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: _tabs.map((tab) => _buildTab(tab, viewModel)).toList(),
+              ),
             ),
           ),
           const SizedBox(height: 24),
           Row(
-            mainAxisAlignment: MainAxisAlignment.end,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _buildAddDriverButton(context, viewModel),
+              const FadeInSlide(
+                direction: FadeInDirection.leftToRight,
+                delay: Duration(milliseconds: 400),
+                child: Text(
+                  'All Registered Drivers',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primaryNavy),
+                ),
+              ),
+              FadeInSlide(
+                direction: FadeInDirection.rightToLeft,
+                delay: const Duration(milliseconds: 400),
+                child: _buildAddDriverButton(context, viewModel)
+              ),
             ],
           ),
         ],
@@ -141,23 +160,10 @@ class _DriversScreenState extends State<DriversScreen> {
 
   Widget _buildTab(String label, DriversViewModel viewModel) {
     final bool isSelected = viewModel.selectedTab == label;
-    return InkWell(
+    return _HoverTab(
+      label: label,
+      isSelected: isSelected,
       onTap: () => viewModel.setSelectedTab(label),
-      child: Container(
-        margin: const EdgeInsets.only(right: 24),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? AppColors.primaryNavy : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isSelected ? Colors.white : Colors.grey.shade600,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-          ),
-        ),
-      ),
     );
   }
 
@@ -174,79 +180,93 @@ class _DriversScreenState extends State<DriversScreen> {
           child: SingleChildScrollView(
             controller: _horizontalScrollController,
             scrollDirection: Axis.horizontal,
-            child: Container(
-              width: constraints.maxWidth > 1750 + 48 ? constraints.maxWidth - 48 : 1750,
-              margin: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20, offset: const Offset(0, 10)),
-                ],
+            child: SingleChildScrollView(
+              child: FadeInSlide(
+                direction: FadeInDirection.bottomToTop,
+                delay: const Duration(milliseconds: 500),
+                child: Container(
+                  width: constraints.maxWidth > 1750 + 48 ? constraints.maxWidth - 48 : 1750,
+                  margin: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 20, offset: const Offset(0, 10)),
+                    ],
+                  ),
+                  child: Column(
+                    children: [
+                      _buildTableHeader(),
+                      const Divider(height: 1),
+                      StreamBuilder<List<BusSchedule>>(
+                        stream: firebaseService.getBusSchedules(),
+                        builder: (context, scheduleSnapshot) {
+                          final allSchedules = scheduleSnapshot.data ?? [];
+                          return StreamBuilder<List<DriverModel>>(
+                            stream: firebaseService.getDrivers(),
+                            builder: (context, snapshot) {
+                              if (snapshot.connectionState == ConnectionState.waiting) {
+                                return const SizedBox(height: 300, child: Center(child: CircularProgressIndicator()));
+                              }
+                              if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                                return const SizedBox(height: 300, child: Center(child: Text('No drivers found.', style: TextStyle(color: Colors.grey))));
+                              }
+
+                              var drivers = snapshot.data!;
+                              if (viewModel.selectedTab != 'All') {
+                                drivers = drivers.where((d) {
+                                  if (viewModel.selectedTab == 'Available') return d.status == 'Online' || d.status == 'Available';
+                                  if (viewModel.selectedTab == 'un-Available') return d.status == 'Offline' || d.status == 'Busy';
+                                  if (viewModel.selectedTab == 'Verified') return d.isVerified;
+                                  if (viewModel.selectedTab == 'Non-Verified') return !d.isVerified;
+                                  return true;
+                                }).toList();
+                              }
+
+                              final searchQuery = dashboardViewModel.searchQuery;
+                              if (searchQuery.isNotEmpty) {
+                                drivers = drivers.where((d) =>
+                                  d.name.toLowerCase().contains(searchQuery.toLowerCase()) ||
+                                  d.email.toLowerCase().contains(searchQuery.toLowerCase()) ||
+                                  d.phoneNumber.contains(searchQuery)).toList();
+                              }
+
+                              return ListView.separated(
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
+                                padding: EdgeInsets.zero,
+                                itemCount: drivers.length,
+                                separatorBuilder: (context, index) => Divider(height: 1, color: Colors.grey.shade100),
+                                itemBuilder: (context, index) => _DriverRow(
+                                  driver: drivers[index], 
+                                  viewModel: viewModel, 
+                                  allSchedules: allSchedules,
+                                  onEdit: (d) => _showEditDriverDialog(context, viewModel, d),
+                                  onNotify: (d) => _showSendNotificationDialog(context, d.id, d.name),
+                                  onDelete: (d) => _showDeleteConfirmation(context, viewModel, d),
+                                  onMiniDocTap: (url) => _showMiniDocDialog(context, url),
+                                ),
+                              );
+                            },
+                          );
+                        }
+                      ),
+                    ],
+                  ),
+                ),
               ),
-          child: Column(
-            children: [
-              _buildTableHeader(),
-              const Divider(height: 1),
-              StreamBuilder<List<BusSchedule>>(
-                stream: firebaseService.getBusSchedules(),
-                builder: (context, scheduleSnapshot) {
-                  final allSchedules = scheduleSnapshot.data ?? [];
-                  return StreamBuilder<List<DriverModel>>(
-                    stream: firebaseService.getDrivers(),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const SizedBox(height: 300, child: Center(child: CircularProgressIndicator()));
-                      }
-                      if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                        return const SizedBox(height: 300, child: Center(child: Text('No drivers found.', style: TextStyle(color: Colors.grey))));
-                      }
-
-                      var drivers = snapshot.data!;
-                      if (viewModel.selectedTab != 'All') {
-                        drivers = drivers.where((d) {
-                          if (viewModel.selectedTab == 'Available') return d.status == 'Online' || d.status == 'Available';
-                          if (viewModel.selectedTab == 'un-Available') return d.status == 'Offline' || d.status == 'Busy';
-                          if (viewModel.selectedTab == 'Verified') return d.isVerified;
-                          if (viewModel.selectedTab == 'Non-Verified') return !d.isVerified;
-                          return true;
-                        }).toList();
-                      }
-
-                      final searchQuery = dashboardViewModel.searchQuery;
-                      if (searchQuery.isNotEmpty) {
-                        drivers = drivers.where((d) =>
-                          d.name.toLowerCase().contains(searchQuery.toLowerCase()) ||
-                          d.email.toLowerCase().contains(searchQuery.toLowerCase()) ||
-                          d.phoneNumber.contains(searchQuery)).toList();
-                      }
-
-                      return ListView.separated(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        padding: EdgeInsets.zero,
-                        itemCount: drivers.length,
-                        separatorBuilder: (context, index) => Divider(height: 1, color: Colors.grey.shade100),
-                        itemBuilder: (context, index) => _buildDriverRow(drivers[index], viewModel, allSchedules),
-                      );
-                    },
-                  );
-                }
-              ),
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
-  },
-);
-}
+  }
 
   Widget _buildTableHeader() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
       decoration: BoxDecoration(
-        color: AppColors.primaryNavy.withOpacity(0.02),
+        color: AppColors.primaryNavy.withValues(alpha: 0.02),
         borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
       ),
       child: const Row(
@@ -262,249 +282,17 @@ class _DriversScreenState extends State<DriversScreen> {
           Expanded(flex: 2, child: Text('DOCS', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 10, color: AppColors.primaryNavy, letterSpacing: 1.2))),
           Expanded(flex: 2, child: Text('STATUS', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 10, color: AppColors.primaryNavy, letterSpacing: 1.2))),
           Expanded(flex: 1, child: Text('VERIFIED', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 10, color: AppColors.primaryNavy, letterSpacing: 1.2))),
-          Expanded(flex: 3, child: Text('ACTIONS', textAlign: TextAlign.right, style: TextStyle(fontWeight: FontWeight.w800, fontSize: 10, color: AppColors.primaryNavy, letterSpacing: 1.2))),
+          Expanded(flex: 4, child: Text('ACTIONS', textAlign: TextAlign.right, style: TextStyle(fontWeight: FontWeight.w800, fontSize: 10, color: AppColors.primaryNavy, letterSpacing: 1.2))),
         ],
       ),
     );
   }
 
-  Widget _buildDriverRow(DriverModel driver, DriversViewModel viewModel, List<BusSchedule> allSchedules) {
-    final firebaseService = context.read<FirebaseService>();
-    final expiryDate = "${driver.licenseExpiry.day}/${driver.licenseExpiry.month}/${driver.licenseExpiry.year}";
-    
-    final driverSchedules = allSchedules.where((s) {
-      final sBus = (s.busNumber ?? '').toLowerCase().trim();
-      final dBus = driver.assignedBus.toLowerCase().trim();
-      if (sBus == dBus) return true;
-      final parts = sBus.split(',').map((e) => e.trim());
-      if (parts.contains(dBus)) return true;
-      if (sBus.contains(dBus) || dBus.contains(sBus)) return true;
-      return false;
-    }).toList();
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-      child: Row(
-        children: [
-            // Driver Info
-            Expanded(
-              flex: 3,
-              child: Row(
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: AppColors.borderLight),
-                      image: driver.profileUrl != null 
-                        ? DecorationImage(image: CachedNetworkImageProvider(driver.profileUrl!), fit: BoxFit.cover)
-                        : null,
-                    ),
-                    child: driver.profileUrl == null ? const Icon(Icons.person, size: 20, color: Colors.grey) : null,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(driver.name, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.textDark)),
-                        Text(driver.email, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            // Phone
-            Expanded(flex: 2, child: Text(driver.phoneNumber, style: const TextStyle(fontSize: 12))),
-            // CNIC
-            Expanded(flex: 2, child: Text(driver.cnic, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
-            // License
-            Expanded(flex: 2, child: Text(driver.licenseNumber, style: const TextStyle(fontSize: 12))),
-            // Expiry
-            Expanded(flex: 2, child: Text(expiryDate, style: TextStyle(fontSize: 12, color: driver.licenseExpiry.isBefore(DateTime.now()) ? Colors.red : Colors.green))),
-            // Bus #
-            Expanded(flex: 1, child: Text(driver.assignedBus, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primaryNavy))),
-            // Assigned Routes
-            Expanded(
-              flex: 2,
-              child: driverSchedules.isEmpty
-                ? const Text('None', style: TextStyle(fontSize: 12, color: Colors.grey))
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: driverSchedules.map((s) => Padding(
-                      padding: const EdgeInsets.only(bottom: 2.0),
-                      child: Tooltip(
-                        message: "${s.departureTime ?? 'Live'} • ${s.stops.join(' ➔ ')}",
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: AppColors.primaryNavy.withOpacity(0.05),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            s.route,
-                            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.primaryNavy),
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1,
-                          ),
-                        ),
-                      ),
-                    )).toList(),
-                  ),
-            ),
-            // Exp
-            Expanded(flex: 1, child: Text(driver.experience, style: const TextStyle(fontSize: 12))),
-            // Docs
-            Expanded(
-              flex: 2,
-              child: Row(
-                children: [
-                  if (driver.cnicFrontUrl != null) _buildMiniDoc(context, driver.cnicFrontUrl!),
-                  if (driver.cnicFrontUrl != null) const SizedBox(width: 4),
-                  if (driver.cnicBackUrl != null) _buildMiniDoc(context, driver.cnicBackUrl!),
-                  if (driver.cnicBackUrl != null) const SizedBox(width: 4),
-                  if (driver.licenseImageUrl != null) _buildMiniDoc(context, driver.licenseImageUrl!),
-                ],
-              ),
-            ),
-            // Status
-            Expanded(
-              flex: 2,
-              child: _buildStatusBadge(
-                isBlocked: driver.isBlocked,
-                status: driver.status,
-                isDriver: true,
-              ),
-            ),
-            // Verified
-            Expanded(
-              flex: 1,
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Transform.scale(
-                  scale: 0.9,
-                  child: Checkbox(
-                    value: driver.isVerified,
-                    activeColor: Colors.blue,
-                    onChanged: (val) {
-                      if (val != null) {
-                        viewModel.updateDriver(driver.copyWith(isVerified: val));
-                      }
-                    },
-                  ),
-                ),
-              ),
-            ),
-            // Actions
-            Expanded(
-              flex: 3,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  _buildIconButton(Icons.edit_outlined, AppColors.primaryNavy, () => _showEditDriverDialog(context, viewModel, driver), tooltip: 'Edit Driver'),
-                  const SizedBox(width: 4),
-                  _buildIconButton(Icons.add_road_rounded, AppColors.primaryNavy, () {
-                    context.read<DashboardViewModel>().setSelectedIndex(13);
-                  }, tooltip: 'Assign Routes'),
-                  const SizedBox(width: 4),
-                  _buildIconButton(Icons.lock_reset, Colors.orange, () {
-                    firebaseService.resetDriverPassword(driver.email);
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Password reset email sent.')));
-                  }, tooltip: 'Reset Password'),
-                  const SizedBox(width: 4),
-                  _buildIconButton(
-                    driver.isBlocked ? Icons.lock_open_outlined : Icons.block_outlined, 
-                    driver.isBlocked ? Colors.green : Colors.red, 
-                    () => viewModel.updateDriver(driver.copyWith(isBlocked: !driver.isBlocked)),
-                    tooltip: driver.isBlocked ? 'Unblock Driver' : 'Block Driver',
-                  ),
-                  const SizedBox(width: 4),
-                  _buildIconButton(Icons.message_outlined, Colors.blue, () => _showSendNotificationDialog(context, driver.id, driver.name), tooltip: 'Send Notification'),
-                  const SizedBox(width: 4),
-                  _buildIconButton(Icons.delete_outline, Colors.red, () => _showDeleteConfirmation(context, viewModel, driver), tooltip: 'Delete Driver'),
-                ],
-              ),
-            ),
-          ],
-        ),
-    );
-  }
 
-  Widget _buildIconButton(IconData icon, Color color, VoidCallback onTap, {String? tooltip}) {
-    Widget button = InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.08),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Icon(icon, size: 18, color: color),
-      ),
-    );
-    if (tooltip != null) {
-      button = Tooltip(message: tooltip, child: button);
-    }
-    return button;
-  }
 
-  Widget _buildStatusBadge({required bool isBlocked, required String status, bool isDriver = false}) {
-    final Color bgColor;
-    final Color textColor;
-    final Color dotColor;
-    final String label;
-    final IconData dotIcon;
 
-    if (isBlocked) {
-      bgColor = Colors.red.withOpacity(0.1);
-      textColor = Colors.red.shade700;
-      dotColor = Colors.red;
-      label = 'Blocked';
-      dotIcon = Icons.block_rounded;
-    } else if (status == 'Online' || status == 'Active' || status == 'Available') {
-      bgColor = Colors.green.withOpacity(0.1);
-      textColor = Colors.green.shade700;
-      dotColor = Colors.green;
-      label = status == 'Available' ? 'Available' : 'Online';
-      dotIcon = Icons.circle;
-    } else if (isDriver && status == 'Busy') {
-      bgColor = Colors.orange.withOpacity(0.1);
-      textColor = Colors.orange.shade700;
-      dotColor = Colors.orange;
-      label = 'Busy';
-      dotIcon = Icons.circle;
-    } else {
-      bgColor = Colors.grey.withOpacity(0.1);
-      textColor = Colors.grey.shade600;
-      dotColor = Colors.grey.shade400;
-      label = 'Offline';
-      dotIcon = Icons.circle;
-    }
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: dotColor.withOpacity(0.3)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(dotIcon, size: 8, color: dotColor),
-          const SizedBox(width: 5),
-          Text(
-            label,
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: textColor),
-          ),
-        ],
-      ),
-    );
-  }
 
 
   void _showDeleteConfirmation(BuildContext context, DriversViewModel viewModel, DriverModel driver) {
@@ -638,37 +426,7 @@ class _DriversScreenState extends State<DriversScreen> {
     );
   }
 
-  Widget _buildMiniDoc(BuildContext context, String url) {
-    return InkWell(
-      onTap: () {
-        showDialog(
-          context: context,
-          builder: (ctx) => Dialog(
-            backgroundColor: Colors.transparent,
-            child: InteractiveViewer(
-              child: CachedNetworkImage(
-                imageUrl: url,
-                placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
-                errorWidget: (context, url, error) => const Icon(Icons.error, color: Colors.white),
-              ),
-            ),
-          ),
-        );
-      },
-      child: Container(
-        width: 28,
-        height: 28,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: AppColors.borderLight),
-          image: DecorationImage(
-            image: CachedNetworkImageProvider(url),
-            fit: BoxFit.cover,
-          ),
-        ),
-      ),
-    );
-  }
+
 
   // Rest of methods (Add/Edit Dialogs) kept optimized with ValueNotifiers...
   // I will just implement the core pattern for one dialog to show the optimization
@@ -749,7 +507,7 @@ class _DriversScreenState extends State<DriversScreen> {
                           Icons.email,
                           validator: (val) {
                             if (val == null || val.trim().isEmpty) return 'Email is required';
-                            if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(val.trim())) {
+                            if (!RegExp(r'^[\w-.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(val.trim())) {
                               return 'Enter valid email';
                             }
                             return null;
@@ -1199,31 +957,215 @@ class _DriversScreenState extends State<DriversScreen> {
       stream: firebaseService.getDrivers(),
       builder: (context, snapshot) {
         final count = snapshot.hasData ? snapshot.data!.length : 0;
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(30), border: Border.all(color: AppColors.borderLight)),
-          child: Text('Total: $count', style: const TextStyle(fontWeight: FontWeight.bold)),
+        return FadeInSlide(
+          direction: FadeInDirection.rightToLeft,
+          delay: const Duration(milliseconds: 200),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppColors.primaryNavy.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: AppColors.primaryNavy.withValues(alpha: 0.2)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.people_outline_rounded, size: 16, color: AppColors.primaryNavy),
+                const SizedBox(width: 8),
+                Text(
+                  '$count Drivers',
+                  style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primaryNavy, fontSize: 13),
+                ),
+              ],
+            ),
+          ),
         );
       },
     );
   }
 
-  Widget _buildActionButton(String label, Color color, VoidCallback onTap) {
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
-        child: Text(label, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12)),
+
+  
+  Widget _buildAddDriverButton(BuildContext context, DriversViewModel viewModel) {
+    return ElevatedButton.icon(
+      onPressed: () => _showAddDriverDialog(context, viewModel),
+      icon: const Icon(Icons.add, size: 18),
+      label: const Text('Add Driver'),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: AppColors.primaryNavy,
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        elevation: 2,
+        shadowColor: AppColors.primaryNavy.withValues(alpha: 0.3),
       ),
     );
   }
-  
-  Widget _buildAddDriverButton(BuildContext context, DriversViewModel viewModel) {
-    return ElevatedButton(
-      onPressed: () => _showAddDriverDialog(context, viewModel),
-      style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryNavy, foregroundColor: Colors.white),
-      child: const Text('Add Driver'),
+
+  void _showMiniDocDialog(BuildContext context, String url) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: InteractiveViewer(
+          child: CachedNetworkImage(
+            imageUrl: url,
+            placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
+            errorWidget: (context, url, error) => const Icon(Icons.error, color: Colors.white),
+          ),
+        ),
+      ),
     );
+  }
+}
+
+class _HoverTab extends StatefulWidget {
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+  const _HoverTab({required this.label, required this.isSelected, required this.onTap});
+  @override
+  State<_HoverTab> createState() => _HoverTabState();
+}
+
+class _HoverTabState extends State<_HoverTab> {
+  bool _isHovered = false;
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: InkWell(
+        onTap: widget.onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          margin: const EdgeInsets.only(right: 24),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(color: widget.isSelected ? AppColors.primaryNavy : (_isHovered ? AppColors.primaryNavy.withValues(alpha: 0.05) : Colors.transparent), borderRadius: BorderRadius.circular(8)),
+          child: Text(widget.label, style: TextStyle(color: widget.isSelected ? Colors.white : (_isHovered ? AppColors.primaryNavy : Colors.grey.shade600), fontWeight: widget.isSelected ? FontWeight.bold : FontWeight.normal)),
+        ),
+      ),
+    );
+  }
+}
+
+class _DriverRow extends StatefulWidget {
+  final DriverModel driver;
+  final DriversViewModel viewModel;
+  final List<BusSchedule> allSchedules;
+  final Function(DriverModel) onEdit, onNotify, onDelete;
+  final Function(String) onMiniDocTap;
+  const _DriverRow({required this.driver, required this.viewModel, required this.allSchedules, required this.onEdit, required this.onNotify, required this.onDelete, required this.onMiniDocTap});
+  @override
+  State<_DriverRow> createState() => _DriverRowState();
+}
+
+class _DriverRowState extends State<_DriverRow> {
+  bool _isHovered = false;
+  @override
+  Widget build(BuildContext context) {
+    final d = widget.driver;
+    final firebaseService = context.read<FirebaseService>();
+    final expiryDate = "${d.licenseExpiry.day}/${d.licenseExpiry.month}/${d.licenseExpiry.year}";
+    
+    final driverSchedules = widget.allSchedules.where((s) => s.assignedDriverId == d.id).toList();
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        decoration: BoxDecoration(color: _isHovered ? AppColors.primaryNavy.withValues(alpha: 0.02) : Colors.transparent),
+        child: Row(
+          children: [
+            Expanded(flex: 3, child: Row(children: [AnimatedScale(scale: _isHovered ? 1.1 : 1.0, duration: const Duration(milliseconds: 200), child: Container(width: 40, height: 40, decoration: BoxDecoration(borderRadius: BorderRadius.circular(10), border: Border.all(color: AppColors.borderLight), image: d.profileUrl != null ? DecorationImage(image: CachedNetworkImageProvider(d.profileUrl!), fit: BoxFit.cover) : null), child: d.profileUrl == null ? const Icon(Icons.person, size: 20, color: Colors.grey) : null)), const SizedBox(width: 12), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(d.name, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: _isHovered ? AppColors.primaryNavy : AppColors.textDark)), Text(d.email, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: Colors.grey.shade500))]))])),
+            Expanded(flex: 2, child: Text(d.phoneNumber, style: const TextStyle(fontSize: 12))),
+            Expanded(flex: 2, child: Text(d.cnic, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
+            Expanded(flex: 2, child: Text(d.licenseNumber, style: const TextStyle(fontSize: 12))),
+            Expanded(flex: 2, child: Text(expiryDate, style: TextStyle(fontSize: 12, color: d.licenseExpiry.isBefore(DateTime.now()) ? Colors.red : Colors.green))),
+            Expanded(flex: 1, child: Text(d.assignedBus, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primaryNavy))),
+            Expanded(flex: 2, child: driverSchedules.isEmpty ? const Text('None', style: TextStyle(fontSize: 12, color: Colors.grey)) : Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: driverSchedules.map((s) => Padding(padding: const EdgeInsets.only(bottom: 2.0), child: Tooltip(message: "${s.departureTime ?? 'Live'} • ${s.stops.join(' ➔ ')}", child: Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: AppColors.primaryNavy.withValues(alpha: 0.05), borderRadius: BorderRadius.circular(4)), child: Text(s.route, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.primaryNavy), overflow: TextOverflow.ellipsis, maxLines: 1))))).toList())),
+            Expanded(flex: 1, child: Text(d.experience, style: const TextStyle(fontSize: 12))),
+            Expanded(flex: 2, child: Row(children: [if (d.cnicFrontUrl != null) _MiniDocItem(url: d.cnicFrontUrl!, onTap: widget.onMiniDocTap), if (d.cnicFrontUrl != null) const SizedBox(width: 4), if (d.cnicBackUrl != null) _MiniDocItem(url: d.cnicBackUrl!, onTap: widget.onMiniDocTap), if (d.cnicBackUrl != null) const SizedBox(width: 4), if (d.licenseImageUrl != null) _MiniDocItem(url: d.licenseImageUrl!, onTap: widget.onMiniDocTap)])),
+            Expanded(flex: 2, child: _buildStatusBadge(isBlocked: d.isBlocked, status: d.status)),
+            Expanded(flex: 1, child: Align(alignment: Alignment.centerLeft, child: Transform.scale(scale: 0.9, child: Checkbox(value: d.isVerified, activeColor: Colors.blue, onChanged: (val) { if (val != null) widget.viewModel.updateDriver(d.copyWith(isVerified: val)); } )))),
+            Expanded(flex: 4, child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+              _ActionIconButton(icon: Icons.edit_outlined, color: AppColors.primaryNavy, onTap: () => widget.onEdit(d), tooltip: 'Edit'),
+              const SizedBox(width: 4),
+              _ActionIconButton(icon: Icons.add_road_rounded, color: AppColors.primaryNavy, onTap: () => context.read<DashboardViewModel>().setSelectedIndex(13), tooltip: 'Routes'),
+              const SizedBox(width: 4),
+              _ActionIconButton(icon: Icons.lock_reset, color: Colors.orange, onTap: () { firebaseService.resetDriverPassword(d.email); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Password reset email sent.'))); }, tooltip: 'Reset'),
+              const SizedBox(width: 4),
+              _ActionIconButton(icon: d.isBlocked ? Icons.lock_open_outlined : Icons.block_outlined, color: d.isBlocked ? Colors.green : Colors.red, onTap: () => widget.viewModel.updateDriver(d.copyWith(isBlocked: !d.isBlocked)), tooltip: d.isBlocked ? 'Unblock' : 'Block'),
+              const SizedBox(width: 4),
+              _ActionIconButton(icon: Icons.message_outlined, color: Colors.blue, onTap: () => widget.onNotify(d), tooltip: 'Notify'),
+              const SizedBox(width: 4),
+              _ActionIconButton(icon: Icons.delete_outline, color: Colors.red, onTap: () => widget.onDelete(d), tooltip: 'Delete'),
+            ])),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatusBadge({required bool isBlocked, required String status}) {
+    final Color color;
+    final String label;
+    final IconData icon;
+
+    if (isBlocked) {
+      color = Colors.red;
+      label = 'Blocked';
+      icon = Icons.block_rounded;
+    } else if (status == 'Online' || status == 'Active' || status == 'Available') {
+      color = Colors.green;
+      label = status == 'Available' ? 'Available' : 'Online';
+      icon = Icons.circle;
+    } else if (status == 'Busy') {
+      color = Colors.orange;
+      label = 'Busy';
+      icon = Icons.circle;
+    } else {
+      color = Colors.grey;
+      label = 'Offline';
+      icon = Icons.circle;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(20), border: Border.all(color: color.withValues(alpha: 0.3))),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(icon, size: 8, color: color), const SizedBox(width: 5), Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: color))]),
+    );
+  }
+}
+
+class _MiniDocItem extends StatelessWidget {
+  final String url;
+  final Function(String) onTap;
+  const _MiniDocItem({required this.url, required this.onTap});
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: () => onTap(url),
+      child: Container(width: 28, height: 28, decoration: BoxDecoration(borderRadius: BorderRadius.circular(6), border: Border.all(color: AppColors.borderLight), image: DecorationImage(image: CachedNetworkImageProvider(url), fit: BoxFit.cover))),
+    );
+  }
+}
+
+class _ActionIconButton extends StatefulWidget {
+  final IconData icon; final Color color; final VoidCallback onTap; final String? tooltip;
+  const _ActionIconButton({required this.icon, required this.color, required this.onTap, this.tooltip});
+  @override
+  State<_ActionIconButton> createState() => _ActionIconButtonState();
+}
+
+class _ActionIconButtonState extends State<_ActionIconButton> {
+  bool _isHovered = false;
+  @override
+  Widget build(BuildContext context) {
+    Widget b = MouseRegion(onEnter: (_) => setState(() => _isHovered = true), onExit: (_) => setState(() => _isHovered = false), child: InkWell(onTap: widget.onTap, borderRadius: BorderRadius.circular(8), child: AnimatedContainer(duration: const Duration(milliseconds: 200), padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: _isHovered ? widget.color : widget.color.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(8)), child: Icon(widget.icon, size: 18, color: _isHovered ? Colors.white : widget.color))));
+    return widget.tooltip != null ? Tooltip(message: widget.tooltip, child: b) : b;
   }
 }

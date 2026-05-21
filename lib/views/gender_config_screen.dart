@@ -5,6 +5,7 @@ import 'package:unitransit_admin/core/constants/app_colors.dart';
 import 'package:unitransit_admin/core/utils/responsive_util.dart';
 import 'package:unitransit_admin/view_models/gender_config_view_model.dart';
 import 'package:unitransit_admin/view_models/login_view_model.dart';
+import 'package:unitransit_admin/core/utils/animations.dart';
 
 class GenderConfigScreen extends StatefulWidget {
   const GenderConfigScreen({super.key});
@@ -225,77 +226,88 @@ class _GenderConfigScreenState extends State<GenderConfigScreen> {
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: Container(
-        padding: EdgeInsets.all(isMobile ? 16 : 32),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildHeader(context, isMobile, isSuperAdmin),
-            const SizedBox(height: 32),
-            Expanded(
-              child: viewModel.isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : viewModel.genderConfigs.isEmpty
-                      ? _buildEmptyState()
-                      : _buildGenderGrid(viewModel, isDesktop, isSuperAdmin),
-            ),
-          ],
+      body: FadeInSlide(
+        duration: const Duration(milliseconds: 600),
+        child: Container(
+          padding: EdgeInsets.all(isMobile ? 16 : 32),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildHeader(context, isMobile, isSuperAdmin),
+              const SizedBox(height: 32),
+              Expanded(
+                child: viewModel.isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : viewModel.genderConfigs.isEmpty
+                        ? _buildEmptyState()
+                        : _buildGenderGrid(viewModel, isDesktop, isSuperAdmin),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
   Widget _buildHeader(BuildContext context, bool isMobile, bool isSuperAdmin) {
-    return Wrap(
-      spacing: 16,
-      runSpacing: 16,
-      alignment: WrapAlignment.spaceBetween,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: AppColors.primaryNavy.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(Icons.category_rounded, color: AppColors.primaryNavy, size: 24),
-            ),
-            const SizedBox(width: 16),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Gender Config',
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: AppColors.textDark, letterSpacing: -0.5),
+    return FadeInSlide(
+      direction: FadeInDirection.leftToRight,
+      child: Wrap(
+        spacing: 16,
+        runSpacing: 16,
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.primaryNavy.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                if (!isMobile)
-                  const Text('Manage categories and colors.', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-              ],
-            ),
-          ],
-        ),
-        if (isSuperAdmin)
-          ElevatedButton.icon(
-            onPressed: () => _showAddDialog(context),
-            icon: const Icon(Icons.add_rounded, size: 18),
-            label: const Text('Add Category'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primaryNavy,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                child: const Icon(Icons.category_rounded, color: AppColors.primaryNavy, size: 24),
+              ),
+              const SizedBox(width: 16),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Gender Config',
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: AppColors.textDark, letterSpacing: -0.5),
+                  ),
+                  if (!isMobile)
+                    const Text('Manage categories and colors.', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                ],
+              ),
+            ],
+          ),
+          FadeInSlide(
+            direction: FadeInDirection.rightToLeft,
+            child: ElevatedButton.icon(
+              onPressed: () => _showAddDialog(context),
+              icon: const Icon(Icons.add_rounded, size: 18),
+              label: const Text('Add Category'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primaryNavy,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
             ),
           ),
-      ],
+        ],
+      ),
     );
   }
 
   Widget _buildEmptyState() {
     return Center(
-      child: Text('No categories found.', style: TextStyle(color: AppColors.textSecondary)),
+      child: FadeInSlide(
+        direction: FadeInDirection.bottomToTop,
+        child: Text('No categories found.', style: TextStyle(color: AppColors.textSecondary))
+      ),
     );
   }
 
@@ -313,49 +325,102 @@ class _GenderConfigScreenState extends State<GenderConfigScreen> {
         String hexColor = viewModel.genderConfigs.values.elementAt(index);
         Color color = Color(int.parse(hexColor.replaceFirst('#', '0xFF')));
 
-        return Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: AppColors.borderLight),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
-                      child: Icon(Icons.person_rounded, color: color, size: 20),
-                    ),
-                    const Spacer(),
-                    if (isSuperAdmin)
-                      PopupMenuButton<String>(
-                        onSelected: (v) {
-                          if (v == 'edit') _showAddDialog(context, name, color);
-                          if (v == 'delete') _showDeleteConfirm(context, name);
-                        },
-                        icon: const Icon(Icons.more_horiz_rounded, color: AppColors.textSecondary),
-                        itemBuilder: (context) => [
-                          const PopupMenuItem(value: 'edit', child: Text('Edit')),
-                          const PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: Colors.red))),
-                        ],
-                      ),
-                  ],
-                ),
-                const Spacer(),
-                Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                Text(hexColor, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-              ],
-            ),
+        return FadeInSlide(
+          direction: FadeInDirection.bottomToTop,
+          delay: Duration(milliseconds: 100 * index),
+          child: _GenderConfigCard(
+            name: name,
+            hexColor: hexColor,
+            color: color,
+            isSuperAdmin: isSuperAdmin,
+            onEdit: () => _showAddDialog(context, name, color),
+            onDelete: () => _showDeleteConfirm(context, name),
           ),
         );
       },
     );
   }
+}
+
+class _GenderConfigCard extends StatefulWidget {
+  final String name;
+  final String hexColor;
+  final Color color;
+  final bool isSuperAdmin;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  const _GenderConfigCard({
+    required this.name,
+    required this.hexColor,
+    required this.color,
+    required this.isSuperAdmin,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  @override
+  State<_GenderConfigCard> createState() => _GenderConfigCardState();
+}
+
+class _GenderConfigCardState extends State<_GenderConfigCard> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: _isHovered ? widget.color.withValues(alpha: 0.5) : AppColors.borderLight),
+          boxShadow: _isHovered ? [
+            BoxShadow(color: widget.color.withValues(alpha: 0.1), blurRadius: 15, offset: const Offset(0, 8)),
+          ] : [],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  AnimatedScale(
+                    scale: _isHovered ? 1.1 : 1.0,
+                    duration: const Duration(milliseconds: 200),
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(color: widget.color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
+                      child: Icon(Icons.person_rounded, color: widget.color, size: 20),
+                    ),
+                  ),
+                  const Spacer(),
+                  PopupMenuButton<String>(
+                    onSelected: (v) {
+                      if (v == 'edit') widget.onEdit();
+                      if (v == 'delete') widget.onDelete();
+                    },
+                    icon: const Icon(Icons.more_horiz_rounded, color: AppColors.textSecondary),
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(value: 'edit', child: Text('Edit')),
+                      const PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: Colors.red))),
+                    ],
+                  ),
+                ],
+              ),
+              const Spacer(),
+              Text(widget.name, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: _isHovered ? widget.color : AppColors.textDark)),
+              Text(widget.hexColor, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
 
   void _showDeleteConfirm(BuildContext context, String name) {
     showDialog(
@@ -370,4 +435,4 @@ class _GenderConfigScreenState extends State<GenderConfigScreen> {
       ),
     );
   }
-}
+

@@ -20,13 +20,83 @@ class _AssignRoutesScreenState extends State<AssignRoutesScreen> {
   String? _selectedDriverId;
   String? _selectedDriverName;
   final TextEditingController _conductorController = TextEditingController();
+  final TextEditingController _busController = TextEditingController();
+  final TextEditingController _timeController = TextEditingController();
   bool _isSaving = false;
   String _searchQuery = '';
+
+  // Calendar Selection State
+  late DateTime _selectedDate;
+  late DateTime _currentMonth;
+  late ScrollController _calendarScrollController;
+  final List<String> _weekdays = [
+    'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedDate = DateTime.now();
+    _currentMonth = DateTime(_selectedDate.year, _selectedDate.month);
+    _calendarScrollController = ScrollController();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToSelectedDate());
+  }
 
   @override
   void dispose() {
     _conductorController.dispose();
+    _busController.dispose();
+    _timeController.dispose();
+    _calendarScrollController.dispose();
     super.dispose();
+  }
+
+  void _scrollToSelectedDate() {
+    if (_calendarScrollController.hasClients) {
+      final index = _selectedDate.day - 1;
+      _calendarScrollController.animateTo(
+        index * 58.0, // Approximate width of one calendar item (58 width + 10 margin)
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    }
+  }
+
+  List<DateTime> _generateDaysInMonth(DateTime month) {
+    final lastDayOfMonth = DateTime(month.year, month.month + 1, 0);
+    return List.generate(
+      lastDayOfMonth.day,
+      (index) => DateTime(month.year, month.month, index + 1),
+    );
+  }
+
+  String _getMonthName(DateTime date) {
+    const months = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    return months[date.month - 1];
+  }
+
+  String _getWeekdayName(DateTime date) {
+    return _weekdays[date.weekday - 1];
+  }
+
+  String _formatDate(DateTime date) {
+    return "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
+  }
+
+  void _changeMonth(int offset) {
+    setState(() {
+      _currentMonth = DateTime(_currentMonth.year, _currentMonth.month + offset);
+      // Select first day of the new month
+      if (_currentMonth.year == DateTime.now().year && _currentMonth.month == DateTime.now().month) {
+        _selectedDate = DateTime.now();
+      } else {
+        _selectedDate = DateTime(_currentMonth.year, _currentMonth.month, 1);
+      }
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToSelectedDate());
   }
 
   void _selectSchedule(BusSchedule schedule) {
@@ -35,6 +105,8 @@ class _AssignRoutesScreenState extends State<AssignRoutesScreen> {
       _selectedDriverId = schedule.assignedDriverId;
       _selectedDriverName = schedule.assignedDriverName;
       _conductorController.text = schedule.assignedConductorName ?? '';
+      _busController.text = schedule.busNumber ?? '';
+      _timeController.text = schedule.departureTime ?? '';
     });
   }
 
@@ -50,6 +122,8 @@ class _AssignRoutesScreenState extends State<AssignRoutesScreen> {
             padding: EdgeInsets.all(isMobile ? 16 : 32),
             child: _buildHeader(context),
           ),
+          _buildCalendarSection(),
+          const SizedBox(height: 16),
           Expanded(
             child: isMobile
                 ? (_selectedSchedule != null ? _buildAssignmentPanel(context) : _buildSchedulesList(context))
@@ -67,35 +141,175 @@ class _AssignRoutesScreenState extends State<AssignRoutesScreen> {
     );
   }
 
-  Widget _buildHeader(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (AppResponsiveUtil.isMobile(context))
-              IconButton(
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-                onPressed: () => context.read<DashboardViewModel>().setSelectedIndex(0),
-                icon: const Icon(Icons.arrow_back, color: AppColors.textDark),
+  Widget _buildCalendarSection() {
+    final days = _generateDaysInMonth(_currentMonth);
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 32),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.borderLight),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.01),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.calendar_today_rounded, color: AppColors.primaryNavy, size: 20),
+                  const SizedBox(width: 10),
+                  Text(
+                    '${_getMonthName(_currentMonth)} ${_currentMonth.year}',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textDark,
+                    ),
+                  ),
+                ],
               ),
-            if (AppResponsiveUtil.isMobile(context)) const SizedBox(width: 12),
-            Flexible(
-              child: Text('Assign Routes & Crews',
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.bold, color: AppColors.textDark, letterSpacing: -0.5,
-                  fontSize: AppResponsiveUtil.isMobile(context) ? 24 : null,
-                ),
+              Row(
+                children: [
+                  IconButton(
+                    onPressed: () => _changeMonth(-1),
+                    icon: const Icon(Icons.chevron_left_rounded),
+                    style: IconButton.styleFrom(
+                      backgroundColor: AppColors.backgroundLight,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    onPressed: () => _changeMonth(1),
+                    icon: const Icon(Icons.chevron_right_rounded),
+                    style: IconButton.styleFrom(
+                      backgroundColor: AppColors.backgroundLight,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                ],
               ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 72,
+            child: ListView.builder(
+              controller: _calendarScrollController,
+              scrollDirection: Axis.horizontal,
+              itemCount: days.length,
+              itemBuilder: (context, index) {
+                final dayDate = days[index];
+                final isSelected = dayDate.day == _selectedDate.day &&
+                    dayDate.month == _selectedDate.month &&
+                    dayDate.year == _selectedDate.year;
+
+                return GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _selectedDate = dayDate;
+                      _selectedSchedule = null; // Reset selection on date change
+                    });
+                  },
+                  child: Container(
+                    width: 58,
+                    margin: const EdgeInsets.only(right: 10),
+                    decoration: BoxDecoration(
+                      color: isSelected ? AppColors.primaryNavy : Colors.transparent,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isSelected ? Colors.transparent : AppColors.borderLight,
+                      ),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          _getWeekdayName(dayDate).substring(0, 3).toUpperCase(),
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                            color: isSelected ? Colors.white70 : AppColors.textSecondary,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          dayDate.day.toString(),
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: isSelected ? Colors.white : AppColors.textDark,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
             ),
-          ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeader(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (AppResponsiveUtil.isMobile(context))
+                    IconButton(
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: () => context.read<DashboardViewModel>().setSelectedIndex(0),
+                      icon: const Icon(Icons.arrow_back, color: AppColors.textDark),
+                    ),
+                  if (AppResponsiveUtil.isMobile(context)) const SizedBox(width: 12),
+                  Flexible(
+                    child: Text('Assign Routes & Crews',
+                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                        fontWeight: FontWeight.bold, color: AppColors.textDark, letterSpacing: -0.5,
+                        fontSize: AppResponsiveUtil.isMobile(context) ? 24 : null,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Select a schedule to assign driver, conductor, bus, time, and route.',
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+              ),
+            ],
+          ),
         ),
-        const SizedBox(height: 4),
-        const Text(
-          'Select a schedule to assign driver, conductor, bus, time, and route.',
-          style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+        const SizedBox(width: 16),
+        ElevatedButton.icon(
+          onPressed: () => _showCreateAssignmentDialog(context),
+          icon: const Icon(Icons.add_rounded, size: 20),
+          label: const Text('Add Assignment', style: TextStyle(fontWeight: FontWeight.w600)),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.primaryNavy,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
         ),
       ],
     );
@@ -103,6 +317,7 @@ class _AssignRoutesScreenState extends State<AssignRoutesScreen> {
 
   Widget _buildSchedulesList(BuildContext context) {
     final firebaseService = context.read<FirebaseService>();
+    final isMobile = AppResponsiveUtil.isMobile(context);
     return Container(
       color: Colors.white,
       child: Column(
@@ -124,22 +339,7 @@ class _AssignRoutesScreenState extends State<AssignRoutesScreen> {
               ),
             ),
           ),
-          // Table header
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            color: AppColors.primaryNavy.withOpacity(0.03),
-            child: const Row(
-              children: [
-                Expanded(flex: 3, child: Text('ROUTE', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 10, color: AppColors.primaryNavy, letterSpacing: 1.2))),
-                Expanded(flex: 2, child: Text('BUS / TIME', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 10, color: AppColors.primaryNavy, letterSpacing: 1.2))),
-                Expanded(flex: 2, child: Text('DRIVER', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 10, color: AppColors.primaryNavy, letterSpacing: 1.2))),
-                Expanded(flex: 2, child: Text('CONDUCTOR', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 10, color: AppColors.primaryNavy, letterSpacing: 1.2))),
-                SizedBox(width: 40, child: Text('STATUS', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 10, color: AppColors.primaryNavy, letterSpacing: 1.2))),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-          // Schedules list
+          
           Expanded(
             child: StreamBuilder<List<BusSchedule>>(
               stream: firebaseService.getBusSchedules(),
@@ -150,7 +350,23 @@ class _AssignRoutesScreenState extends State<AssignRoutesScreen> {
                 if (!snapshot.hasData || snapshot.data!.isEmpty) {
                   return const Center(child: Text('No schedules found. Create schedules first.', style: TextStyle(color: Colors.grey)));
                 }
-                var schedules = snapshot.data!;
+                
+                final allSchedules = snapshot.data!;
+                final selectedDateStr = _formatDate(_selectedDate);
+                final selectedDayName = _getWeekdayName(_selectedDate);
+
+                var schedules = allSchedules.where((schedule) {
+                  // Filter by Date & Weekdays
+                  if (schedule.date != null && schedule.date!.isNotEmpty) {
+                    return schedule.date == selectedDateStr;
+                  }
+                  if (schedule.operatingDays != null && schedule.operatingDays!.isNotEmpty) {
+                    return schedule.operatingDays!.contains(selectedDayName);
+                  }
+                  // Default Daily schedules do not run on weekends (Saturday & Sunday)
+                  return selectedDayName != 'Saturday' && selectedDayName != 'Sunday';
+                }).toList();
+
                 if (_searchQuery.isNotEmpty) {
                   schedules = schedules.where((s) =>
                     s.route.toLowerCase().contains(_searchQuery) ||
@@ -159,10 +375,47 @@ class _AssignRoutesScreenState extends State<AssignRoutesScreen> {
                     (s.assignedConductorName ?? '').toLowerCase().contains(_searchQuery)
                   ).toList();
                 }
-                return ListView.separated(
-                  itemCount: schedules.length,
-                  separatorBuilder: (_, __) => Divider(height: 1, color: Colors.grey.shade100),
-                  itemBuilder: (context, idx) => _buildScheduleRow(schedules[idx]),
+
+                return Column(
+                  children: [
+                    // Dynamic count & legend info bar
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            "${schedules.length} Active Assignment${schedules.length == 1 ? '' : 's'}",
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                          if (!isMobile)
+                            Row(
+                              children: [
+                                _legendDot(Colors.green, 'Staffed'),
+                                const SizedBox(width: 12),
+                                _legendDot(Colors.amber.shade800, 'Partial'),
+                                const SizedBox(width: 12),
+                                _legendDot(Colors.red, 'Unassigned'),
+                              ],
+                            ),
+                        ],
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    Expanded(
+                      child: schedules.isEmpty
+                          ? const Center(child: Text('No schedules for this date.', style: TextStyle(color: Colors.grey)))
+                          : ListView.builder(
+                              padding: const EdgeInsets.only(top: 8, bottom: 24),
+                              itemCount: schedules.length,
+                              itemBuilder: (context, idx) => _buildScheduleRow(schedules[idx]),
+                            ),
+                    ),
+                  ],
                 );
               },
             ),
@@ -172,77 +425,360 @@ class _AssignRoutesScreenState extends State<AssignRoutesScreen> {
     );
   }
 
+  Widget _legendDot(Color color, String label) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+        ),
+      ],
+    );
+  }
+
   Widget _buildScheduleRow(BusSchedule schedule) {
+    final isMobile = AppResponsiveUtil.isMobile(context);
     final isSelected = _selectedSchedule?.id == schedule.id;
     final hasDriver = schedule.assignedDriverId != null && schedule.assignedDriverId!.isNotEmpty;
     final hasConductor = schedule.assignedConductorName != null && schedule.assignedConductorName!.isNotEmpty;
     final isFullyAssigned = hasDriver && hasConductor;
+    final isPartiallyAssigned = hasDriver || hasConductor;
 
-    return InkWell(
-      onTap: () => _selectSchedule(schedule),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-        color: isSelected ? AppColors.primaryNavy.withOpacity(0.04) : Colors.transparent,
-        child: Row(
-          children: [
-            // Route
-            Expanded(
-              flex: 3,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+    Color statusColor = Colors.red;
+    String statusText = 'Unassigned';
+    if (isFullyAssigned) {
+      statusColor = Colors.green;
+      statusText = 'Fully Staffed';
+    } else if (isPartiallyAssigned) {
+      statusColor = Colors.amber.shade800;
+      statusText = 'Partial Crew';
+    }
+
+    Widget content;
+    if (isMobile) {
+      content = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 4,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: statusColor,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      schedule.route,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                        color: AppColors.textDark,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppColors.primaryNavy.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            schedule.type,
+                            style: const TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.primaryNavy,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: statusColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  statusText,
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                    color: statusColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8.0),
+            child: Divider(height: 1),
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
                 children: [
-                  Text(schedule.route, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.textDark), overflow: TextOverflow.ellipsis),
-                  const SizedBox(height: 2),
-                  Text(schedule.type, style: TextStyle(fontSize: 10, color: Colors.grey.shade600)),
+                  const Icon(Icons.directions_bus_rounded, size: 13, color: AppColors.primaryNavy),
+                  const SizedBox(width: 4),
+                  Text(
+                    schedule.busNumber ?? 'TBA',
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textDark),
+                  ),
+                  const SizedBox(width: 12),
+                  const Icon(Icons.access_time_filled_rounded, size: 13, color: AppColors.textSecondary),
+                  const SizedBox(width: 4),
+                  Text(
+                    schedule.departureTime ?? 'Live',
+                    style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                  ),
                 ],
               ),
-            ),
-            // Bus / Time
-            Expanded(
-              flex: 2,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(children: [
-                    const Icon(Icons.directions_bus, size: 12, color: AppColors.primaryNavy),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Expanded(
+                child: Row(
+                  children: [
+                    const Icon(Icons.drive_eta_rounded, size: 13, color: AppColors.textSecondary),
                     const SizedBox(width: 4),
-                    Text(schedule.busNumber ?? 'TBA', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                  ]),
-                  const SizedBox(height: 2),
-                  Row(children: [
-                    const Icon(Icons.access_time, size: 12, color: AppColors.textSecondary),
+                    Expanded(
+                      child: Text(
+                        hasDriver ? schedule.assignedDriverName! : 'No Driver',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: hasDriver ? FontWeight.w600 : FontWeight.normal,
+                          color: hasDriver ? AppColors.textDark : Colors.red.shade400,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Row(
+                  children: [
+                    const Icon(Icons.person_pin_rounded, size: 13, color: AppColors.textSecondary),
                     const SizedBox(width: 4),
-                    Text(schedule.departureTime ?? 'Live', style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
-                  ]),
-                ],
+                    Expanded(
+                      child: Text(
+                        hasConductor ? schedule.assignedConductorName! : 'No Conductor',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: hasConductor ? FontWeight.w600 : FontWeight.normal,
+                          color: hasConductor ? AppColors.textDark : Colors.red.shade400,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      );
+    } else {
+      content = Row(
+        children: [
+          // Left Accent Status bar
+          Container(
+            width: 4,
+            height: 40,
+            decoration: BoxDecoration(
+              color: statusColor,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 16),
+          
+          // Route Info
+          Expanded(
+            flex: 4,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  schedule.route,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: AppColors.textDark,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryNavy.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        schedule.type,
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primaryNavy,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          // Bus / Time Details
+          Expanded(
+            flex: 3,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.directions_bus_rounded, size: 14, color: AppColors.primaryNavy),
+                    const SizedBox(width: 6),
+                    Text(
+                      schedule.busNumber ?? 'TBA',
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textDark),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    const Icon(Icons.access_time_filled_rounded, size: 14, color: AppColors.textSecondary),
+                    const SizedBox(width: 6),
+                    Text(
+                      schedule.departureTime ?? 'Live',
+                      style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          // Driver & Conductor Info
+          Expanded(
+            flex: 4,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.drive_eta_rounded, size: 14, color: AppColors.textSecondary),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        hasDriver ? schedule.assignedDriverName! : 'No Driver Assigned',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: hasDriver ? FontWeight.w600 : FontWeight.normal,
+                          color: hasDriver ? AppColors.textDark : Colors.red.shade400,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    const Icon(Icons.person_pin_rounded, size: 14, color: AppColors.textSecondary),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        hasConductor ? schedule.assignedConductorName! : 'No Conductor Assigned',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: hasConductor ? FontWeight.w600 : FontWeight.normal,
+                          color: hasConductor ? AppColors.textDark : Colors.red.shade400,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          // Status Badge
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: statusColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              statusText,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: statusColor,
               ),
             ),
-            // Driver
-            Expanded(
-              flex: 2,
-              child: Text(
-                hasDriver ? schedule.assignedDriverName! : '— Not Assigned',
-                style: TextStyle(fontSize: 12, fontWeight: hasDriver ? FontWeight.w600 : FontWeight.normal, color: hasDriver ? AppColors.textDark : Colors.red.shade400),
-              ),
-            ),
-            // Conductor
-            Expanded(
-              flex: 2,
-              child: Text(
-                hasConductor ? schedule.assignedConductorName! : '— Not Assigned',
-                style: TextStyle(fontSize: 12, fontWeight: hasConductor ? FontWeight.w600 : FontWeight.normal, color: hasConductor ? AppColors.textDark : Colors.red.shade400),
-              ),
-            ),
-            // Status
-            SizedBox(
-              width: 40,
-              child: Icon(
-                isFullyAssigned ? Icons.check_circle : Icons.warning_amber_rounded,
-                size: 18,
-                color: isFullyAssigned ? Colors.green : Colors.orange,
-              ),
-            ),
-          ],
+          ),
+        ],
+      );
+    }
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      decoration: BoxDecoration(
+        color: isSelected ? AppColors.primaryNavy.withOpacity(0.04) : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isSelected ? AppColors.primaryNavy : AppColors.borderLight,
+          width: isSelected ? 1.5 : 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(isSelected ? 0.04 : 0.01),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(11),
+        child: InkWell(
+          onTap: () => _selectSchedule(schedule),
+          hoverColor: AppColors.primaryNavy.withOpacity(0.02),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: content,
+          ),
         ),
       ),
     );
@@ -374,9 +910,44 @@ class _AssignRoutesScreenState extends State<AssignRoutesScreen> {
           const SizedBox(height: 12),
           TextField(
             controller: _conductorController,
+            onChanged: (val) => setState(() {}),
             decoration: InputDecoration(
               hintText: 'Enter conductor name...',
               prefixIcon: const Icon(Icons.person_pin_outlined, color: AppColors.primaryNavy),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: AppColors.borderLight)),
+              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.primaryNavy)),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            ),
+          ),
+
+          const SizedBox(height: 24),
+          // Bus ID
+          const Text('ASSIGN BUS ID / NUMBER', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 10, color: AppColors.primaryNavy, letterSpacing: 1.5)),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _busController,
+            onChanged: (val) => setState(() {}),
+            decoration: InputDecoration(
+              hintText: 'Enter bus ID or number...',
+              prefixIcon: const Icon(Icons.directions_bus_outlined, color: AppColors.primaryNavy),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: AppColors.borderLight)),
+              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.primaryNavy)),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            ),
+          ),
+
+          const SizedBox(height: 24),
+          // Departure Time
+          const Text('ASSIGN DEPARTURE TIME', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 10, color: AppColors.primaryNavy, letterSpacing: 1.5)),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _timeController,
+            onChanged: (val) => setState(() {}),
+            decoration: InputDecoration(
+              hintText: 'Enter departure time (e.g. 08:30 AM)...',
+              prefixIcon: const Icon(Icons.access_time_rounded, color: AppColors.primaryNavy),
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: AppColors.borderLight)),
               focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.primaryNavy)),
@@ -400,8 +971,8 @@ class _AssignRoutesScreenState extends State<AssignRoutesScreen> {
                 const Text('ASSIGNMENT SUMMARY', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 10, color: AppColors.primaryNavy, letterSpacing: 1.2)),
                 const SizedBox(height: 12),
                 _summaryRow(Icons.map_outlined, 'Route', schedule.route),
-                _summaryRow(Icons.directions_bus, 'Bus', schedule.busNumber ?? 'TBA'),
-                _summaryRow(Icons.access_time, 'Departure', schedule.departureTime ?? 'Live'),
+                _summaryRow(Icons.directions_bus, 'Bus', _busController.text.isNotEmpty ? _busController.text : 'TBA'),
+                _summaryRow(Icons.access_time, 'Departure', _timeController.text.isNotEmpty ? _timeController.text : 'Live'),
                 _summaryRow(Icons.drive_eta, 'Driver', _selectedDriverName ?? 'Not Assigned'),
                 _summaryRow(Icons.person_pin, 'Conductor', _conductorController.text.isNotEmpty ? _conductorController.text : 'Not Assigned'),
               ],
@@ -414,23 +985,30 @@ class _AssignRoutesScreenState extends State<AssignRoutesScreen> {
             children: [
               Expanded(
                 child: OutlinedButton(
-                  onPressed: () => setState(() => _selectedSchedule = null),
-                  style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                  child: const Text('Cancel'),
+                  onPressed: _selectedSchedule == null ? null : () => _selectSchedule(schedule),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    side: const BorderSide(color: AppColors.borderLight),
+                  ),
+                  child: const Text('Reset', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textDark)),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 16),
               Expanded(
+                flex: 2,
                 child: ElevatedButton(
                   onPressed: _isSaving ? null : _saveAssignment,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryNavy, foregroundColor: Colors.white,
+                    backgroundColor: AppColors.primaryNavy,
+                    foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    elevation: 0,
                   ),
                   child: _isSaving
                       ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : const Text('Save Assignment'),
+                      : const Text('Save Assignment', style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
               ),
             ],
@@ -454,7 +1032,7 @@ class _AssignRoutesScreenState extends State<AssignRoutesScreen> {
 
   Widget _summaryRow(IconData icon, String label, String value) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(children: [
         Icon(icon, size: 16, color: AppColors.primaryNavy),
         const SizedBox(width: 10),
@@ -469,15 +1047,16 @@ class _AssignRoutesScreenState extends State<AssignRoutesScreen> {
     setState(() => _isSaving = true);
 
     try {
-      final firebaseService = context.read<FirebaseService>();
       final db = FirebaseFirestore.instance;
       final schedule = _selectedSchedule!;
 
-      // 1. Update schedule document with driver + conductor
+      // 1. Update schedule document with driver + conductor + bus + departure time
       await db.collection('schedules').doc(schedule.id).update({
         'assignedDriverId': _selectedDriverId ?? '',
         'assignedDriverName': _selectedDriverName ?? '',
         'assignedConductorName': _conductorController.text.trim(),
+        'busNumber': _busController.text.trim(),
+        'departureTime': _timeController.text.trim(),
       });
 
       // 2. Update driver's assignedRoutes list (add this schedule id)
@@ -513,10 +1092,60 @@ class _AssignRoutesScreenState extends State<AssignRoutesScreen> {
         if (oldDriverDoc.exists) {
           final oldRoutes = List<String>.from(oldDriverDoc.data()?['assignedRoutes'] ?? []);
           oldRoutes.remove(schedule.id);
+          // Also compile bus numbers for the old driver
+          final busNumbers = <String>{};
+          for (final sid in oldRoutes) {
+            final sDoc = await db.collection('schedules').doc(sid).get();
+            if (sDoc.exists) {
+              final bn = sDoc.data()?['busNumber'] ?? '';
+              if (bn.toString().isNotEmpty && bn != 'TBA') busNumbers.add(bn);
+            }
+          }
           await db.collection('drivers').doc(schedule.assignedDriverId).update({
             'assignedRoutes': oldRoutes,
+            'assignedBus': busNumbers.join(', '),
           });
         }
+      }
+
+      // Send notifications to drivers
+      final firebaseService = context.read<FirebaseService>();
+      final prevDriverId = schedule.assignedDriverId;
+      final newDriverId = _selectedDriverId;
+      final newBus = _busController.text.trim();
+      final newTime = _timeController.text.trim();
+      final routeName = schedule.route;
+
+      final isDriverChanged = prevDriverId != newDriverId;
+      final isBusOrTimeChanged = newBus != schedule.busNumber || newTime != schedule.departureTime;
+
+      if (isDriverChanged) {
+        // Notify old driver
+        if (prevDriverId != null && prevDriverId.isNotEmpty) {
+          await firebaseService.sendUserNotification(
+            userId: prevDriverId,
+            title: 'Route Assignment Removed',
+            message: 'Your assignment for route \'$routeName\' has been removed or transferred.',
+            type: 'alert',
+          );
+        }
+        // Notify new driver
+        if (newDriverId != null && newDriverId.isNotEmpty) {
+          await firebaseService.sendUserNotification(
+            userId: newDriverId,
+            title: 'New Route Assigned',
+            message: 'You have been assigned to Bus \'$newBus\' at \'$newTime\' for route \'$routeName\'.',
+            type: 'info',
+          );
+        }
+      } else if (isBusOrTimeChanged && newDriverId != null && newDriverId.isNotEmpty) {
+        // Notify current driver about updates
+        await firebaseService.sendUserNotification(
+          userId: newDriverId,
+          title: 'Assignment Details Updated',
+          message: 'Your assignment details for route \'$routeName\' have been updated to Bus \'$newBus\' departing at \'$newTime\'.',
+          type: 'info',
+        );
       }
 
       // Update local state
@@ -525,6 +1154,8 @@ class _AssignRoutesScreenState extends State<AssignRoutesScreen> {
           assignedDriverId: _selectedDriverId ?? '',
           assignedDriverName: _selectedDriverName ?? '',
           assignedConductorName: _conductorController.text.trim(),
+          busNumber: _busController.text.trim(),
+          departureTime: _timeController.text.trim(),
         );
       });
 
@@ -551,5 +1182,442 @@ class _AssignRoutesScreenState extends State<AssignRoutesScreen> {
     } finally {
       setState(() => _isSaving = false);
     }
+  }
+
+  void _showCreateAssignmentDialog(BuildContext context) {
+    final firebaseService = context.read<FirebaseService>();
+    final db = FirebaseFirestore.instance;
+    final fromController = TextEditingController();
+    final toController = TextEditingController();
+    final busController = TextEditingController();
+    final timeController = TextEditingController(text: '08:30 AM');
+    final conductorController = TextEditingController();
+    
+    String selectedType = 'Combined';
+    String? selectedRouteName;
+    List<String> selectedRouteStops = [];
+    String? dialogSelectedDriverId;
+    String? dialogSelectedDriverName;
+    bool isSavingNew = false;
+    
+    final formKey = GlobalKey<FormState>();
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return Dialog(
+              backgroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              child: Container(
+                width: 600,
+                padding: const EdgeInsets.all(24),
+                child: Form(
+                  key: formKey,
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Add New Route Assignment',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.primaryNavy,
+                              ),
+                            ),
+                            IconButton(
+                              onPressed: () => Navigator.pop(context),
+                              icon: const Icon(Icons.close),
+                            ),
+                          ],
+                        ),
+                        const Divider(height: 24),
+                        
+                        // Select Configured Route Dropdown
+                        StreamBuilder<List<BusSchedule>>(
+                          stream: firebaseService.getBusSchedules(),
+                          builder: (context, snapshot) {
+                            final allSchedules = snapshot.data ?? [];
+                            // Master/Defined routes are those without a specific date
+                            final masterRoutes = allSchedules
+                                .where((s) => s.date == null || s.date!.isEmpty)
+                                .toList();
+                            
+                            // If no master routes found, get unique routes by name to avoid empty dropdown
+                            final List<BusSchedule> availableRoutes = [];
+                            final Set<String> seenRouteNames = {};
+                            for (final s in masterRoutes) {
+                              if (!seenRouteNames.contains(s.route)) {
+                                seenRouteNames.add(s.route);
+                                availableRoutes.add(s);
+                              }
+                            }
+                            if (availableRoutes.isEmpty) {
+                              for (final s in allSchedules) {
+                                if (!seenRouteNames.contains(s.route)) {
+                                  seenRouteNames.add(s.route);
+                                  availableRoutes.add(s);
+                                }
+                              }
+                            }
+
+                            if (availableRoutes.isEmpty) {
+                              return const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 8.0),
+                                child: Text(
+                                  'No defined routes found. Define routes in Route Planning first.',
+                                  style: TextStyle(color: Colors.red, fontSize: 13, fontWeight: FontWeight.bold),
+                                ),
+                              );
+                            }
+
+                            // Set default selected route if not set or invalid
+                            BusSchedule? currentSelectedRoute;
+                            try {
+                              currentSelectedRoute = availableRoutes.firstWhere(
+                                (r) => r.route == selectedRouteName,
+                              );
+                            } catch (_) {
+                              currentSelectedRoute = availableRoutes.first;
+                              selectedRouteName = currentSelectedRoute.route;
+                              fromController.text = currentSelectedRoute.from;
+                              toController.text = currentSelectedRoute.to;
+                              selectedRouteStops = currentSelectedRoute.stops;
+                            }
+
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Select Configured Route',
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.primaryNavy),
+                                ),
+                                const SizedBox(height: 6),
+                                DropdownButtonFormField<String>(
+                                  value: selectedRouteName,
+                                  decoration: InputDecoration(
+                                    prefixIcon: const Icon(Icons.map_rounded, color: AppColors.primaryNavy, size: 18),
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.borderLight)),
+                                  ),
+                                  items: availableRoutes.map((r) => DropdownMenuItem(
+                                    value: r.route,
+                                    child: Text(
+                                      r.route,
+                                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  )).toList(),
+                                  onChanged: (val) {
+                                    if (val != null) {
+                                      final matched = availableRoutes.firstWhere((r) => r.route == val);
+                                      setDialogState(() {
+                                        selectedRouteName = val;
+                                        fromController.text = matched.from;
+                                        toController.text = matched.to;
+                                        selectedRouteStops = matched.stops;
+                                      });
+                                    }
+                                  },
+                                ),
+                                const SizedBox(height: 10),
+                                // Show selected route details (From -> To info card)
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.backgroundLight,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: AppColors.borderLight),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.info_outline, size: 16, color: AppColors.primaryNavy),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          'Start: ${fromController.text}  ➔  End: ${toController.text}',
+                                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textDark),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 16),
+
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildDialogTextField(
+                                label: 'Bus ID / Number',
+                                controller: busController,
+                                icon: Icons.directions_bus_outlined,
+                                validator: (val) => val == null || val.trim().isEmpty ? 'Required' : null,
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: _buildDialogTextField(
+                                label: 'Departure Time',
+                                controller: timeController,
+                                icon: Icons.access_time_rounded,
+                                validator: (val) => val == null || val.trim().isEmpty ? 'Required' : null,
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: StreamBuilder<Map<String, String>>(
+                                stream: firebaseService.getGenderConfigs(),
+                                builder: (context, snapshot) {
+                                  final categories = snapshot.data?.keys.toList() ?? ['Combined', 'Boys Special', 'Girls Special'];
+                                  if (!categories.contains(selectedType)) {
+                                    selectedType = categories.first;
+                                  }
+                                  return Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Service Category',
+                                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.primaryNavy),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      DropdownButtonFormField<String>(
+                                        value: selectedType,
+                                        decoration: InputDecoration(
+                                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                        ),
+                                        items: categories.map((val) => DropdownMenuItem(
+                                          value: val,
+                                          child: Text(val, style: const TextStyle(fontSize: 13)),
+                                        )).toList(),
+                                        onChanged: (val) {
+                                          if (val != null) {
+                                            setDialogState(() {
+                                              selectedType = val;
+                                            });
+                                          }
+                                        },
+                                      ),
+                                    ],
+                                  );
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+
+                        const Text(
+                          'Assign Driver',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.primaryNavy),
+                        ),
+                        const SizedBox(height: 6),
+                        StreamBuilder<List<DriverModel>>(
+                          stream: firebaseService.getDrivers(),
+                          builder: (context, snapshot) {
+                            if (!snapshot.hasData) {
+                              return const Center(child: CircularProgressIndicator());
+                            }
+                            final drivers = snapshot.data!.where((d) => !d.isBlocked).toList();
+                            return Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              decoration: BoxDecoration(
+                                border: Border.all(color: AppColors.borderLight),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: DropdownButtonHideUnderline(
+                                child: DropdownButton<String>(
+                                  isExpanded: true,
+                                  hint: const Text('Select a driver...', style: TextStyle(fontSize: 13)),
+                                  value: dialogSelectedDriverId,
+                                  items: [
+                                    const DropdownMenuItem<String>(value: '', child: Text('— Unassign Driver —', style: TextStyle(color: Colors.red, fontSize: 13))),
+                                    ...drivers.map((d) => DropdownMenuItem<String>(
+                                      value: d.id,
+                                      child: Row(children: [
+                                        CircleAvatar(
+                                          radius: 12,
+                                          backgroundColor: AppColors.primaryNavy.withOpacity(0.1),
+                                          backgroundImage: d.profileUrl != null ? NetworkImage(d.profileUrl!) : null,
+                                          child: d.profileUrl == null ? Text(d.name.isNotEmpty ? d.name[0] : 'D', style: const TextStyle(fontSize: 10, color: AppColors.primaryNavy)) : null,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(d.name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                                      ]),
+                                    )),
+                                  ],
+                                  onChanged: (val) {
+                                    setDialogState(() {
+                                      if (val == null || val.isEmpty) {
+                                        dialogSelectedDriverId = null;
+                                        dialogSelectedDriverName = null;
+                                      } else {
+                                        dialogSelectedDriverId = val;
+                                        dialogSelectedDriverName = drivers.firstWhere((d) => d.id == val).name;
+                                      }
+                                    });
+                                  },
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 16),
+
+                        _buildDialogTextField(
+                          label: 'Assign Conductor',
+                          controller: conductorController,
+                          icon: Icons.person_pin_outlined,
+                        ),
+                        
+                        const SizedBox(height: 24),
+                        
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            OutlinedButton(
+                              onPressed: () => Navigator.pop(context),
+                              child: const Text('Cancel'),
+                            ),
+                            const SizedBox(width: 12),
+                            ElevatedButton(
+                              onPressed: isSavingNew ? null : () async {
+                                if (formKey.currentState!.validate() && selectedRouteName != null) {
+                                  setDialogState(() {
+                                    isSavingNew = true;
+                                  });
+                                  try {
+                                    final newId = db.collection('schedules').doc().id;
+                                    final routeName = selectedRouteName!;
+                                    
+                                    final schedule = BusSchedule(
+                                      id: newId,
+                                      from: fromController.text.trim(),
+                                      to: toController.text.trim(),
+                                      route: routeName,
+                                      departureTime: timeController.text.trim(),
+                                      busNumber: busController.text.trim(),
+                                      stops: selectedRouteStops,
+                                      type: selectedType,
+                                      date: _formatDate(_selectedDate),
+                                      assignedDriverId: dialogSelectedDriverId ?? '',
+                                      assignedDriverName: dialogSelectedDriverName ?? '',
+                                      assignedConductorName: conductorController.text.trim(),
+                                    );
+                                    
+                                    await firebaseService.addBusSchedule(schedule);
+
+                                    // Send Notification to Driver
+                                    if (dialogSelectedDriverId != null && dialogSelectedDriverId!.isNotEmpty) {
+                                      await firebaseService.sendUserNotification(
+                                        userId: dialogSelectedDriverId!,
+                                        title: 'New Route Assigned',
+                                        message: 'You have been assigned to Bus \'${busController.text.trim()}\' at \'${timeController.text.trim()}\' for route \'$routeName\'.',
+                                        type: 'info',
+                                      );
+                                    }
+                                    
+                                    if (dialogSelectedDriverId != null && dialogSelectedDriverId!.isNotEmpty) {
+                                      final driverDoc = await db.collection('drivers').doc(dialogSelectedDriverId).get();
+                                      if (driverDoc.exists) {
+                                        final currentRoutes = List<String>.from(driverDoc.data()?['assignedRoutes'] ?? []);
+                                        if (!currentRoutes.contains(newId)) {
+                                          currentRoutes.add(newId);
+                                        }
+                                        final busNumbers = <String>{};
+                                        for (final sid in currentRoutes) {
+                                          final sDoc = await db.collection('schedules').doc(sid).get();
+                                          if (sDoc.exists) {
+                                            final bn = sDoc.data()?['busNumber'] ?? '';
+                                            if (bn.toString().isNotEmpty && bn != 'TBA') busNumbers.add(bn);
+                                          }
+                                        }
+                                        await db.collection('drivers').doc(dialogSelectedDriverId).update({
+                                          'assignedRoutes': currentRoutes,
+                                          'assignedBus': busNumbers.join(', '),
+                                        });
+                                      }
+                                    }
+                                    
+                                    if (context.mounted) {
+                                      Navigator.pop(context);
+                                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                        content: Text('Assignment created for $routeName successfully!'),
+                                        backgroundColor: Colors.green.shade800,
+                                      ));
+                                    }
+                                  } catch (e) {
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                        content: Text('Error: $e'),
+                                        backgroundColor: Colors.red,
+                                      ));
+                                    }
+                                  } finally {
+                                    setDialogState(() {
+                                      isSavingNew = false;
+                                    });
+                                  }
+                                }
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primaryNavy,
+                                foregroundColor: Colors.white,
+                              ),
+                              child: isSavingNew
+                                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                  : const Text('Save Assignment'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildDialogTextField({
+    required String label,
+    required TextEditingController controller,
+    required IconData icon,
+    String? Function(String?)? validator,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.primaryNavy),
+        ),
+        const SizedBox(height: 6),
+        TextFormField(
+          controller: controller,
+          validator: validator,
+          decoration: InputDecoration(
+            prefixIcon: Icon(icon, size: 16, color: AppColors.primaryNavy),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+          style: const TextStyle(fontSize: 13),
+        ),
+      ],
+    );
   }
 }

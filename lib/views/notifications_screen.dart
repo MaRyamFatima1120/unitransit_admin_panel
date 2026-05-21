@@ -8,6 +8,7 @@ import 'package:unitransit_admin/core/utils/responsive_util.dart';
 import 'package:unitransit_admin/view_models/dashboard_view_model.dart';
 import 'package:unitransit_admin/view_models/notifications_view_model.dart';
 import 'package:unitransit_admin/models/notification_model.dart';
+import 'package:unitransit_admin/core/utils/animations.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -411,214 +412,242 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
     return DefaultTabController(
       length: 2,
-      child: Padding(
-        padding: EdgeInsets.all(isMobile ? 16 : 32),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Responsive Top Bar Section
-            isMobile
-                ? Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Notifications Hub',
-                        style: GoogleFonts.poppins(
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textDark,
-                          fontSize: 24,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Monitor automated system events and send broadcast announcements.',
-                        style: GoogleFonts.inter(
-                          color: AppColors.textSecondary,
-                          fontSize: 11,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 46,
-                        child: ElevatedButton.icon(
-                          onPressed: () => _showSendAlertModal(context),
-                          icon: const Icon(Icons.add_alert_rounded, size: 18),
-                          label: const Text('Send New Alert', style: TextStyle(fontWeight: FontWeight.bold)),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primaryNavy,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: FadeInSlide(
+        duration: const Duration(milliseconds: 600),
+        child: Padding(
+          padding: EdgeInsets.all(isMobile ? 16 : 32),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Responsive Top Bar Section
+              isMobile
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        FadeInSlide(
+                          direction: FadeInDirection.leftToRight,
+                          child: Text(
+                            'Notifications Hub',
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.textDark,
+                              fontSize: 24,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
-                  )
-                : Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Notifications Hub',
-                              style: GoogleFonts.poppins(
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.textDark,
-                                fontSize: isTablet ? 28 : 32,
+                        const SizedBox(height: 4),
+                        FadeInSlide(
+                          direction: FadeInDirection.leftToRight,
+                          delay: const Duration(milliseconds: 100),
+                          child: Text(
+                            'Monitor automated system events and send broadcast announcements.',
+                            style: GoogleFonts.inter(
+                              color: AppColors.textSecondary,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        FadeInSlide(
+                          direction: FadeInDirection.bottomToTop,
+                          delay: const Duration(milliseconds: 200),
+                          child: SizedBox(
+                            width: double.infinity,
+                            height: 46,
+                            child: ElevatedButton.icon(
+                              onPressed: () => _showSendAlertModal(context),
+                              icon: const Icon(Icons.add_alert_rounded, size: 18),
+                              label: const Text('Send New Alert', style: TextStyle(fontWeight: FontWeight.bold)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primaryNavy,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                               ),
                             ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Monitor automated system events and send broadcast announcements.',
-                              style: GoogleFonts.inter(
-                                color: AppColors.textSecondary,
-                                fontSize: 13,
-                              ),
+                          ),
+                        ),
+                      ],
+                    )
+                  : Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: FadeInSlide(
+                            direction: FadeInDirection.leftToRight,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Notifications Hub',
+                                  style: GoogleFonts.poppins(
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.textDark,
+                                    fontSize: isTablet ? 28 : 32,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Monitor automated system events and send broadcast announcements.',
+                                  style: GoogleFonts.inter(
+                                    color: AppColors.textSecondary,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
                             ),
-                          ],
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 16),
-                      ElevatedButton.icon(
-                        onPressed: () => _showSendAlertModal(context),
-                        icon: const Icon(Icons.add_alert_rounded, size: 18),
-                        label: const Text('Send New Alert', style: TextStyle(fontWeight: FontWeight.bold)),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primaryNavy,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        const SizedBox(width: 16),
+                        FadeInSlide(
+                          direction: FadeInDirection.rightToLeft,
+                          child: ElevatedButton.icon(
+                            onPressed: () => _showSendAlertModal(context),
+                            icon: const Icon(Icons.add_alert_rounded, size: 18),
+                            label: const Text('Send New Alert', style: TextStyle(fontWeight: FontWeight.bold)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primaryNavy,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-            const SizedBox(height: 28),
-
-            // Tab Bar
-            Container(
-              decoration: const BoxDecoration(
-                border: Border(bottom: BorderSide(color: AppColors.borderLight, width: 1.5)),
-              ),
-              child: TabBar(
-                isScrollable: false,
-                labelColor: AppColors.primaryNavy,
-                unselectedLabelColor: AppColors.textSecondary,
-                indicatorColor: AppColors.primaryNavy,
-                indicatorSize: TabBarIndicatorSize.tab,
-                labelStyle: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: isMobile ? 12 : 14),
-                unselectedLabelStyle: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: isMobile ? 12 : 14),
-                tabs: const [
-                  Tab(text: 'System Activity Logs'),
-                  Tab(text: 'Broadcast Alerts Center'),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            // Tab Views
-            Expanded(
-              child: TabBarView(
-                children: [
-                  // Tab 1: System Activity Logs
-                  Container(
-                    decoration: BoxDecoration(
-                      color: AppColors.cardWhite,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: AppColors.borderLight),
+                      ],
                     ),
-                    child: systemNotifications.isEmpty
-                        ? _buildEmptyState('No system logs recorded.')
-                        : Column(
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.all(16.0),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      '${systemNotifications.length} Pending Notifications',
-                                      style: GoogleFonts.poppins(
-                                        fontWeight: FontWeight.bold,
-                                        color: AppColors.textDark,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                    TextButton.icon(
-                                      onPressed: () {
-                                        context.read<DashboardViewModel>().clearAllNotifications();
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(
-                                            content: const Text('All notifications marked as read.'),
-                                            backgroundColor: Colors.green.shade600,
-                                            duration: const Duration(seconds: 1),
-                                          ),
-                                        );
-                                      },
-                                      icon: const Icon(Icons.done_all_rounded, size: 18, color: Colors.green),
-                                      label: Text(
-                                        'Mark All Read',
-                                        style: GoogleFonts.poppins(
-                                          color: Colors.green,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 13,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const Divider(height: 1, color: AppColors.borderLight),
-                              Expanded(
-                                child: ListView.separated(
-                                  padding: const EdgeInsets.symmetric(vertical: 8),
-                                  itemCount: systemNotifications.length,
-                                  separatorBuilder: (context, index) => const Divider(height: 1, color: AppColors.borderLight),
-                                  itemBuilder: (context, index) {
-                                    final notification = systemNotifications[index];
-                                    return _buildNotificationTile(context, notification, isMobile);
-                                  },
-                                ),
-                              ),
-                            ],
-                          ),
-                  ),
+              const SizedBox(height: 28),
 
-                  // Tab 2: Broadcast Alerts Center
-                  StreamBuilder<List<Map<String, dynamic>>>(
-                    stream: notificationsViewModel.getSentNotifications(),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const Center(child: CircularProgressIndicator(color: AppColors.primaryNavy));
-                      }
-                      
-                      final alerts = snapshot.data ?? [];
-                      
-                      return Container(
+              // Tab Bar
+              FadeInSlide(
+                direction: FadeInDirection.leftToRight,
+                delay: const Duration(milliseconds: 300),
+                child: Container(
+                  decoration: const BoxDecoration(
+                    border: Border(bottom: BorderSide(color: AppColors.borderLight, width: 1.5)),
+                  ),
+                  child: TabBar(
+                    isScrollable: false,
+                    labelColor: AppColors.primaryNavy,
+                    unselectedLabelColor: AppColors.textSecondary,
+                    indicatorColor: AppColors.primaryNavy,
+                    indicatorSize: TabBarIndicatorSize.tab,
+                    labelStyle: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: isMobile ? 12 : 14),
+                    unselectedLabelStyle: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: isMobile ? 12 : 14),
+                    tabs: const [
+                      Tab(text: 'System Activity Logs'),
+                      Tab(text: 'Broadcast Alerts Center'),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Tab Views
+              Expanded(
+                child: FadeInSlide(
+                  direction: FadeInDirection.bottomToTop,
+                  delay: const Duration(milliseconds: 400),
+                  child: TabBarView(
+                    children: [
+                      // Tab 1: System Activity Logs
+                      Container(
                         decoration: BoxDecoration(
                           color: AppColors.cardWhite,
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(color: AppColors.borderLight),
                         ),
-                        child: alerts.isEmpty
-                            ? _buildEmptyState('No broadcast alerts sent yet.')
-                            : ListView.separated(
-                                padding: const EdgeInsets.symmetric(vertical: 8),
-                                itemCount: alerts.length,
-                                separatorBuilder: (context, index) => const Divider(height: 1, color: AppColors.borderLight),
-                                itemBuilder: (context, index) {
-                                  final alert = alerts[index];
-                                  return _buildBroadcastTile(context, alert, isMobile);
-                                },
+                        child: systemNotifications.isEmpty
+                            ? _buildEmptyState('No system logs recorded.')
+                            : Column(
+                                children: [
+                                  Padding(
+                                    padding: const EdgeInsets.all(16.0),
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text(
+                                          '${systemNotifications.length} Pending Notifications',
+                                          style: GoogleFonts.poppins(
+                                            fontWeight: FontWeight.bold,
+                                            color: AppColors.textDark,
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                        TextButton.icon(
+                                          onPressed: () {
+                                            context.read<DashboardViewModel>().clearAllNotifications();
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(
+                                                content: const Text('All notifications marked as read.'),
+                                                backgroundColor: Colors.green.shade600,
+                                                duration: const Duration(seconds: 1),
+                                              ),
+                                            );
+                                          },
+                                          icon: const Icon(Icons.done_all_rounded, size: 18, color: Colors.green),
+                                          label: Text(
+                                            'Mark All Read',
+                                            style: GoogleFonts.poppins(
+                                              color: Colors.green,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const Divider(height: 1, color: AppColors.borderLight),
+                                  Expanded(
+                                    child: ListView.separated(
+                                      padding: const EdgeInsets.symmetric(vertical: 8),
+                                      itemCount: systemNotifications.length,
+                                      separatorBuilder: (context, index) => const Divider(height: 1, color: AppColors.borderLight),
+                                      itemBuilder: (context, index) {
+                                        final notification = systemNotifications[index];
+                                        return _NotificationRow(notification: notification, isMobile: isMobile);
+                                      },
+                                    ),
+                                  ),
+                                ],
                               ),
-                      );
-                    },
+                      ),
+
+                      // Tab 2: Broadcast Alerts Center
+                      StreamBuilder<List<Map<String, dynamic>>>(
+                        stream: notificationsViewModel.getSentNotifications(),
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState == ConnectionState.waiting) {
+                            return const Center(child: CircularProgressIndicator(color: AppColors.primaryNavy));
+                          }
+                          
+                          final alerts = snapshot.data ?? [];
+                          
+                          return Container(
+                            decoration: BoxDecoration(
+                              color: AppColors.cardWhite,
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: AppColors.borderLight),
+                            ),
+                            child: alerts.isEmpty
+                                ? _buildEmptyState('No broadcast alerts sent yet.')
+                                : ListView.separated(
+                                    padding: const EdgeInsets.symmetric(vertical: 8),
+                                    itemCount: alerts.length,
+                                    separatorBuilder: (context, index) => const Divider(height: 1, color: AppColors.borderLight),
+                                    itemBuilder: (context, index) {
+                                      final alert = alerts[index];
+                                      return _BroadcastRow(alert: alert, isMobile: isMobile);
+                                    },
+                                  ),
+                          );
+                        },
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -629,7 +658,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.notifications_none_rounded, size: 64, color: AppColors.textSecondary.withOpacity(0.3)),
+          Icon(Icons.notifications_none_rounded, size: 64, color: AppColors.textSecondary.withValues(alpha: 0.3)),
           const SizedBox(height: 16),
           Text(
             message,
@@ -643,84 +672,123 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       ),
     );
   }
+}
 
-  Widget _buildNotificationTile(BuildContext context, SystemNotificationModel notification, bool isMobile) {
-    return ListTile(
-      contentPadding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 24, vertical: 12),
-      leading: Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: notification.color.withOpacity(0.1),
-          shape: BoxShape.circle,
-        ),
-        child: Icon(
-          notification.type == NotificationType.support ? Icons.support_agent_rounded : Icons.notifications_active_rounded,
-          color: notification.color,
-          size: 20,
-        ),
-      ),
-      title: Text(
-        notification.title,
-        style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textDark),
-      ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 4),
-          Text(
-            notification.message,
-            style: GoogleFonts.inter(color: AppColors.textDark, fontSize: 12, height: 1.4),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            DateFormat('MMM dd • hh:mm a').format(notification.timestamp),
-            style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 10),
-          ),
-        ],
-      ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (!isMobile)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+
+class _NotificationRow extends StatefulWidget {
+  final SystemNotificationModel notification;
+  final bool isMobile;
+  const _NotificationRow({required this.notification, required this.isMobile});
+
+  @override
+  State<_NotificationRow> createState() => _NotificationRowState();
+}
+
+class _NotificationRowState extends State<_NotificationRow> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final notification = widget.notification;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        color: _isHovered ? AppColors.primaryNavy.withValues(alpha: 0.02) : Colors.transparent,
+        child: ListTile(
+          contentPadding: EdgeInsets.symmetric(horizontal: widget.isMobile ? 16 : 24, vertical: 12),
+          leading: AnimatedScale(
+            scale: _isHovered ? 1.1 : 1.0,
+            duration: const Duration(milliseconds: 200),
+            child: Container(
+              padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: AppColors.backgroundLight,
-                borderRadius: BorderRadius.circular(8),
+                color: notification.color.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
               ),
-              child: Text(
-                notification.type.name.toUpperCase(),
-                style: GoogleFonts.poppins(fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+              child: Icon(
+                notification.type == NotificationType.support ? Icons.support_agent_rounded : Icons.notifications_active_rounded,
+                color: notification.color,
+                size: 20,
               ),
             ),
-          const SizedBox(width: 8),
-          IconButton(
-            icon: const Icon(Icons.check_circle_outline_rounded, color: Colors.green, size: 22),
-            tooltip: 'Dismiss',
-            onPressed: () {
-              context.read<DashboardViewModel>().dismissNotification(notification.id);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: const Text('Notification marked as read & dismissed.'),
-                  backgroundColor: Colors.green.shade600,
-                  duration: const Duration(seconds: 1),
-                ),
-              );
-            },
           ),
-        ],
+          title: Text(
+            notification.title,
+            style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 14, color: _isHovered ? AppColors.primaryNavy : AppColors.textDark),
+          ),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 4),
+              Text(
+                notification.message,
+                style: GoogleFonts.inter(color: AppColors.textDark, fontSize: 12, height: 1.4),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                DateFormat('MMM dd • hh:mm a').format(notification.timestamp),
+                style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 10),
+              ),
+            ],
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (!widget.isMobile)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppColors.backgroundLight,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    notification.type.name.toUpperCase(),
+                    style: GoogleFonts.poppins(fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                  ),
+                ),
+              const SizedBox(width: 8),
+              _DismissButton(onPressed: () {
+                context.read<DashboardViewModel>().dismissNotification(notification.id);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: const Text('Notification marked as read & dismissed.'),
+                    backgroundColor: Colors.green.shade600,
+                    duration: const Duration(seconds: 1),
+                  ),
+                );
+              }),
+            ],
+          ),
+          onTap: () {
+            if (notification.type == NotificationType.support) {
+              context.read<DashboardViewModel>().setSelectedIndex(9); // Index 9 is Support Center
+            } else if (notification.type == NotificationType.warning) {
+              context.read<DashboardViewModel>().setSelectedIndex(12); // Index 12 is Emergency SOS
+            }
+          },
+        ),
       ),
-      onTap: () {
-        if (notification.type == NotificationType.support) {
-          context.read<DashboardViewModel>().setSelectedIndex(9); // Index 9 is Support Center
-        } else if (notification.type == NotificationType.warning) {
-          context.read<DashboardViewModel>().setSelectedIndex(12); // Index 12 is Emergency SOS
-        }
-      },
     );
   }
+}
 
-  Widget _buildBroadcastTile(BuildContext context, Map<String, dynamic> alert, bool isMobile) {
+class _BroadcastRow extends StatefulWidget {
+  final Map<String, dynamic> alert;
+  final bool isMobile;
+  const _BroadcastRow({required this.alert, required this.isMobile});
+
+  @override
+  State<_BroadcastRow> createState() => _BroadcastRowState();
+}
+
+class _BroadcastRowState extends State<_BroadcastRow> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final alert = widget.alert;
     final type = alert['type'] ?? 'info';
     final target = alert['targetAudience'] ?? 'All';
     final timestamp = alert['timestamp'] as DateTime;
@@ -736,104 +804,149 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       icon = Icons.crisis_alert_rounded;
     }
 
-    return ListTile(
-      contentPadding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 24, vertical: 12),
-      leading: Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: badgeColor.withOpacity(0.1),
-          shape: BoxShape.circle,
-        ),
-        child: Icon(
-          icon,
-          color: badgeColor,
-          size: 20,
-        ),
-      ),
-      title: Text(
-        alert['title'] ?? '',
-        style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textDark),
-      ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 4),
-          Text(
-            alert['message'] ?? '',
-            style: GoogleFonts.inter(color: AppColors.textDark, fontSize: 12, height: 1.4),
-          ),
-          if (alert['imageUrl'] != null && alert['imageUrl'].toString().isNotEmpty) ...[
-            const SizedBox(height: 8),
-            GestureDetector(
-              onTap: () {
-                showDialog(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    contentPadding: EdgeInsets.zero,
-                    content: ClipRRect(
-                      borderRadius: BorderRadius.circular(16),
-                      child: CachedNetworkImage(
-                        imageUrl: alert['imageUrl'],
-                        fit: BoxFit.contain,
-                        placeholder: (context, url) => const SizedBox(height: 100, child: Center(child: CircularProgressIndicator())),
-                        errorWidget: (context, url, error) => const SizedBox(height: 100, child: Center(child: Icon(Icons.error))),
-                      ),
-                    ),
-                  ),
-                );
-              },
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: CachedNetworkImage(
-                  imageUrl: alert['imageUrl'],
-                  height: 60,
-                  width: 60,
-                  fit: BoxFit.cover,
-                  placeholder: (context, url) => Container(color: AppColors.borderLight, height: 60, width: 60, child: const Center(child: CircularProgressIndicator(strokeWidth: 2))),
-                  errorWidget: (context, url, error) => Container(color: AppColors.borderLight, height: 60, width: 60, child: const Icon(Icons.error, size: 20)),
-                ),
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        color: _isHovered ? AppColors.primaryNavy.withValues(alpha: 0.02) : Colors.transparent,
+        child: ListTile(
+          contentPadding: EdgeInsets.symmetric(horizontal: widget.isMobile ? 16 : 24, vertical: 12),
+          leading: AnimatedScale(
+            scale: _isHovered ? 1.1 : 1.0,
+            duration: const Duration(milliseconds: 200),
+            child: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: badgeColor.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                icon,
+                color: badgeColor,
+                size: 20,
               ),
             ),
-          ],
-          const SizedBox(height: 6),
-          Wrap(
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 8,
-            runSpacing: 4,
+          ),
+          title: Text(
+            alert['title'] ?? '',
+            style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 14, color: _isHovered ? AppColors.primaryNavy : AppColors.textDark),
+          ),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const SizedBox(height: 4),
               Text(
-                DateFormat('MMM dd • hh:mm a').format(timestamp),
-                style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 10),
+                alert['message'] ?? '',
+                style: GoogleFonts.inter(color: AppColors.textDark, fontSize: 12, height: 1.4),
               ),
-              const Icon(Icons.circle, size: 4, color: AppColors.textSecondary),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: AppColors.primaryNavy.withOpacity(0.06),
-                  borderRadius: BorderRadius.circular(4),
+              if (alert['imageUrl'] != null && alert['imageUrl'].toString().isNotEmpty) ...[
+                const SizedBox(height: 8),
+                GestureDetector(
+                  onTap: () {
+                    showDialog(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        contentPadding: EdgeInsets.zero,
+                        content: ClipRRect(
+                          borderRadius: BorderRadius.circular(16),
+                          child: CachedNetworkImage(
+                            imageUrl: alert['imageUrl'],
+                            fit: BoxFit.contain,
+                            placeholder: (context, url) => const SizedBox(height: 100, child: Center(child: CircularProgressIndicator())),
+                            errorWidget: (context, url, error) => const SizedBox(height: 100, child: Center(child: Icon(Icons.error))),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: CachedNetworkImage(
+                      imageUrl: alert['imageUrl'],
+                      height: 60,
+                      width: 60,
+                      fit: BoxFit.cover,
+                      placeholder: (context, url) => Container(color: AppColors.borderLight, height: 60, width: 60, child: const Center(child: CircularProgressIndicator(strokeWidth: 2))),
+                      errorWidget: (context, url, error) => Container(color: AppColors.borderLight, height: 60, width: 60, child: const Icon(Icons.error, size: 20)),
+                    ),
+                  ),
                 ),
-                child: Text(
-                  'Sent to: $target',
-                  style: GoogleFonts.poppins(fontSize: 9, fontWeight: FontWeight.bold, color: AppColors.primaryNavy),
-                ),
+              ],
+              const SizedBox(height: 6),
+              Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  Text(
+                    DateFormat('MMM dd • hh:mm a').format(timestamp),
+                    style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 10),
+                  ),
+                  const Icon(Icons.circle, size: 4, color: AppColors.textSecondary),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryNavy.withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      'Sent to: $target',
+                      style: GoogleFonts.poppins(fontSize: 9, fontWeight: FontWeight.bold, color: AppColors.primaryNavy),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
-        ],
+          trailing: !widget.isMobile
+              ? Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: badgeColor.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    type.toUpperCase(),
+                    style: GoogleFonts.poppins(fontSize: 9, fontWeight: FontWeight.bold, color: badgeColor, letterSpacing: 0.5),
+                  ),
+                )
+              : null,
+        ),
       ),
-      trailing: !isMobile
-          ? Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: badgeColor.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                type.toUpperCase(),
-                style: GoogleFonts.poppins(fontSize: 9, fontWeight: FontWeight.bold, color: badgeColor, letterSpacing: 0.5),
-              ),
-            )
-          : null,
     );
   }
 }
+
+class _DismissButton extends StatefulWidget {
+  final VoidCallback onPressed;
+  const _DismissButton({required this.onPressed});
+
+  @override
+  State<_DismissButton> createState() => _DismissButtonState();
+}
+
+class _DismissButtonState extends State<_DismissButton> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: Tooltip(
+        message: 'Dismiss',
+        child: IconButton(
+          icon: Icon(
+            Icons.check_circle_outline_rounded,
+            color: _isHovered ? Colors.green : Colors.green.withValues(alpha: 0.5),
+            size: 22,
+          ),
+          onPressed: widget.onPressed,
+        ),
+      ),
+    );
+  }
+}
+
+

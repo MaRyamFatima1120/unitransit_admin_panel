@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:unitransit_admin/core/services/firebase_service.dart';
 import 'package:unitransit_admin/models/notification_model.dart';
 import 'package:unitransit_admin/models/support_ticket_model.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class DashboardViewModel extends ChangeNotifier {
   final FirebaseService _firebaseService = FirebaseService();
@@ -10,6 +11,7 @@ class DashboardViewModel extends ChangeNotifier {
   int _selectedIndex = 0;
   String _searchQuery = '';
   String _selectedGender = 'All';
+  String _selectedTimeScale = 'Week'; // Day, Week, Month, Year
   
   List<SystemNotificationModel> _notifications = [];
   final Set<String> _dismissedNotificationIds = {};
@@ -19,10 +21,16 @@ class DashboardViewModel extends ChangeNotifier {
   int get selectedIndex => _selectedIndex;
   String get searchQuery => _searchQuery;
   String get selectedGender => _selectedGender;
+  String get selectedTimeScale => _selectedTimeScale;
   List<SystemNotificationModel> get notifications => _notifications;
 
   void setSelectedIndex(int index) {
     _selectedIndex = index;
+    notifyListeners();
+  }
+
+  void setTimeScale(String scale) {
+    _selectedTimeScale = scale;
     notifyListeners();
   }
 
@@ -62,14 +70,35 @@ class DashboardViewModel extends ChangeNotifier {
   StreamSubscription? _tripHistorySubscription;
 
   List<Map<String, dynamic>> get recentActivities => _recentActivities;
-  List<double> get weeklyTripStats => _getWeeklyTripStats();
+  List<double> get weeklyTripStats => _getTripStats();
 
   DashboardViewModel() {
+    _loadDismissedNotifications();
     _listenToStats();
     _listenToNewTickets();
     _listenToEmergencyAlerts();
     _listenToTripAlerts();
     _listenToTripHistory();
+  }
+
+  Future<void> _loadDismissedNotifications() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final list = prefs.getStringList('dismissed_notification_ids') ?? [];
+      _dismissedNotificationIds.addAll(list);
+      _updateSystemNotifications();
+    } catch (e) {
+      debugPrint("Error loading dismissed notifications: $e");
+    }
+  }
+
+  Future<void> _saveDismissedNotifications() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList('dismissed_notification_ids', _dismissedNotificationIds.toList());
+    } catch (e) {
+      debugPrint("Error saving dismissed notifications: $e");
+    }
   }
 
   void _listenToTripHistory() {
@@ -268,6 +297,7 @@ class DashboardViewModel extends ChangeNotifier {
 
   void dismissNotification(String id) {
     _dismissedNotificationIds.add(id);
+    _saveDismissedNotifications();
     _updateSystemNotifications();
   }
 
@@ -275,31 +305,74 @@ class DashboardViewModel extends ChangeNotifier {
     for (var notif in _notifications) {
       _dismissedNotificationIds.add(notif.id);
     }
+    _saveDismissedNotifications();
     _updateSystemNotifications();
   }
 
-  List<double> _getWeeklyTripStats() {
-    final List<double> counts = List.filled(7, 0.0);
+  List<double> _getTripStats() {
     final now = DateTime.now();
-    // Start of the week: Monday
-    final monday = now.subtract(Duration(days: now.weekday - 1));
-    final startOfWeek = DateTime(monday.year, monday.month, monday.day);
-    final endOfWeek = startOfWeek.add(const Duration(days: 7));
-
-    for (var trip in _allTrips) {
-      final startTimeVal = trip['startTime'];
-      if (startTimeVal == null) continue;
-      final tripDate = DateTime.fromMillisecondsSinceEpoch(startTimeVal);
-      
-      if ((tripDate.isAfter(startOfWeek) || tripDate.isAtSameMomentAs(startOfWeek)) &&
-          tripDate.isBefore(endOfWeek)) {
-        final dayIndex = tripDate.weekday - 1; // weekday is 1-indexed, so 0 to 6
-        if (dayIndex >= 0 && dayIndex < 7) {
-          counts[dayIndex] += 1.0;
+    
+    if (_selectedTimeScale == 'Day') {
+      final List<double> hourly = List.filled(24, 0.0);
+      final startOfDay = DateTime(now.year, now.month, now.day);
+      for (var trip in _allTrips) {
+        final startTimeVal = trip['startTime'];
+        if (startTimeVal == null) continue;
+        final tripDate = DateTime.fromMillisecondsSinceEpoch(startTimeVal);
+        if (tripDate.year == now.year && tripDate.month == now.month && tripDate.day == now.day) {
+          hourly[tripDate.hour] += 1.0;
         }
       }
+      return hourly;
+    } else if (_selectedTimeScale == 'Month') {
+      // Show stats for the last 30 days
+      final List<double> daily = List.filled(30, 0.0);
+      for (var trip in _allTrips) {
+        final startTimeVal = trip['startTime'];
+        if (startTimeVal == null) continue;
+        final tripDate = DateTime.fromMillisecondsSinceEpoch(startTimeVal);
+        final diff = now.difference(tripDate).inDays;
+        if (diff >= 0 && diff < 30) {
+          daily[29 - diff] += 1.0;
+        }
+      }
+      return daily;
+    } else if (_selectedTimeScale == 'Year') {
+      final List<double> monthly = List.filled(12, 0.0);
+      for (var trip in _allTrips) {
+        final startTimeVal = trip['startTime'];
+        if (startTimeVal == null) continue;
+        final tripDate = DateTime.fromMillisecondsSinceEpoch(startTimeVal);
+        if (tripDate.year == now.year) {
+          monthly[tripDate.month - 1] += 1.0;
+        }
+      }
+      return monthly;
+    } else {
+      // Default to Week
+      final List<double> counts = List.filled(7, 0.0);
+      final monday = now.subtract(Duration(days: now.weekday - 1));
+      final startOfWeek = DateTime(monday.year, monday.month, monday.day);
+      final endOfWeek = startOfWeek.add(const Duration(days: 7));
+
+      for (var trip in _allTrips) {
+        final startTimeVal = trip['startTime'];
+        if (startTimeVal == null) continue;
+        final tripDate = DateTime.fromMillisecondsSinceEpoch(startTimeVal);
+        
+        if ((tripDate.isAfter(startOfWeek) || tripDate.isAtSameMomentAs(startOfWeek)) &&
+            tripDate.isBefore(endOfWeek)) {
+          final dayIndex = tripDate.weekday - 1;
+          if (dayIndex >= 0 && dayIndex < 7) counts[dayIndex] += 1.0;
+        }
+      }
+      return counts;
     }
-    return counts;
+  }
+
+  @Deprecated('Use _getTripStats instead')
+  List<double> _getWeeklyTripStats() {
+    return _getTripStats();
   }
 
   Future<void> refreshData() async {

@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 import 'package:unitransit_admin/core/constants/app_colors.dart';
 import 'package:unitransit_admin/core/utils/responsive_util.dart';
 import 'package:unitransit_admin/models/bus_schedule_model.dart';
+import 'package:unitransit_admin/core/utils/animations.dart';
 
 class FleetOperationsScreen extends StatefulWidget {
   const FleetOperationsScreen({super.key});
@@ -33,12 +34,20 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
   bool _isLoading = true;
   String _selectedGenderFilter = 'All';
 
+  late DateTime _selectedDate;
+  late DateTime _currentMonth;
+  final ScrollController _calendarScrollController = ScrollController();
+  final List<String> _weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
   @override
   void initState() {
     super.initState();
+    _selectedDate = DateTime.now();
+    _currentMonth = DateTime(_selectedDate.year, _selectedDate.month);
     _listenToActiveBuses();
     _listenToSchedules();
     _searchController.addListener(_applyFilters);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToSelectedDate());
   }
 
   @override
@@ -46,7 +55,55 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
     _busesSubscription?.cancel();
     _schedulesSubscription?.cancel();
     _searchController.dispose();
+    _calendarScrollController.dispose();
     super.dispose();
+  }
+
+  void _scrollToSelectedDate() {
+    if (_calendarScrollController.hasClients) {
+      final index = _selectedDate.day - 1;
+      _calendarScrollController.animateTo(
+        index * 58.0,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    }
+  }
+
+  List<DateTime> _generateDaysInMonth(DateTime month) {
+    final lastDayOfMonth = DateTime(month.year, month.month + 1, 0);
+    return List.generate(
+      lastDayOfMonth.day,
+      (index) => DateTime(month.year, month.month, index + 1),
+    );
+  }
+
+  String _getMonthName(DateTime date) {
+    const months = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    return months[date.month - 1];
+  }
+
+  String _getWeekdayName(DateTime date) {
+    return _weekdays[date.weekday - 1];
+  }
+
+  String _formatDate(DateTime date) {
+    return "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
+  }
+
+  void _changeMonth(int offset) {
+    setState(() {
+      _currentMonth = DateTime(_currentMonth.year, _currentMonth.month + offset);
+      if (_currentMonth.year == DateTime.now().year && _currentMonth.month == DateTime.now().month) {
+        _selectedDate = DateTime.now();
+      } else {
+        _selectedDate = DateTime(_currentMonth.year, _currentMonth.month, 1);
+      }
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToSelectedDate());
   }
 
   void _listenToActiveBuses() {
@@ -109,9 +166,15 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
     }).toList();
 
     if (matchedByBus.isNotEmpty) {
-      final todayWeekday = DateFormat('EEEE').format(DateTime.now());
+      final selectedWeekday = DateFormat('EEEE').format(_selectedDate);
+      final selectedDateStr = _formatDate(_selectedDate);
       for (var schedule in matchedByBus) {
-        if (schedule.operatingDays != null && schedule.operatingDays!.contains(todayWeekday)) {
+        if (schedule.date == selectedDateStr) {
+          return schedule;
+        }
+      }
+      for (var schedule in matchedByBus) {
+        if (schedule.operatingDays != null && schedule.operatingDays!.contains(selectedWeekday)) {
           return schedule;
         }
       }
@@ -128,6 +191,12 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
     }).toList();
 
     if (matchedByRoute.isNotEmpty) {
+      final selectedDateStr = _formatDate(_selectedDate);
+      for (var schedule in matchedByRoute) {
+        if (schedule.date == selectedDateStr) {
+          return schedule;
+        }
+      }
       return matchedByRoute.first;
     }
 
@@ -135,21 +204,21 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
   }
 
   int get _totalSchedulesToday {
-    final todayWeekday = DateFormat('EEEE').format(DateTime.now());
-    final todayDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final selectedWeekday = DateFormat('EEEE').format(_selectedDate);
+    final selectedDateStr = _formatDate(_selectedDate);
     return _schedules.where((s) {
-      final isDay = s.operatingDays != null && s.operatingDays!.contains(todayWeekday);
-      final isDate = s.date != null && s.date == todayDate;
+      final isDay = s.operatingDays != null && s.operatingDays!.contains(selectedWeekday);
+      final isDate = s.date != null && s.date == selectedDateStr;
       return isDay || isDate;
     }).length;
   }
 
   int get _activeSchedulesToday {
-    final todayWeekday = DateFormat('EEEE').format(DateTime.now());
-    final todayDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final selectedWeekday = DateFormat('EEEE').format(_selectedDate);
+    final selectedDateStr = _formatDate(_selectedDate);
     final todaySchedules = _schedules.where((s) {
-      final isDay = s.operatingDays != null && s.operatingDays!.contains(todayWeekday);
-      final isDate = s.date != null && s.date == todayDate;
+      final isDay = s.operatingDays != null && s.operatingDays!.contains(selectedWeekday);
+      final isDate = s.date != null && s.date == selectedDateStr;
       return isDay || isDate;
     }).toList();
 
@@ -263,190 +332,211 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
         ? _allBuses.firstWhere((b) => b['id'] == _selectedBusId, orElse: () => {})
         : null;
 
-    return Padding(
-      padding: EdgeInsets.all(isMobile ? 16 : 32),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header details
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+    return FadeInSlide(
+      duration: const Duration(milliseconds: 600),
+      child: Padding(
+        padding: EdgeInsets.all(isMobile ? 16 : 32),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header details
+            FadeInSlide(
+              direction: FadeInDirection.leftToRight,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    'Live Bus Tracking',
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textDark,
-                          fontSize: isMobile ? 24 : null,
-                        ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Live Bus Tracking',
+                        style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.textDark,
+                              fontSize: isMobile ? 24 : null,
+                            ),
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Monitor university buses and active driver locations in real-time.',
+                        style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'Monitor university buses and active driver locations in real-time.',
-                    style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                  if (!isMobile) _buildStatsBadges(),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+            if (isMobile) ...[
+              FadeInSlide(
+                direction: FadeInDirection.bottomToTop,
+                delay: const Duration(milliseconds: 100),
+                child: _buildStatsBadges()
+              ),
+              const SizedBox(height: 16),
+            ],
+
+            _buildCalendarSection(),
+            const SizedBox(height: 16),
+
+            // Split View layout
+            Expanded(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Directory List Side (Left Panel)
+                  if (!isMobile)
+                    FadeInSlide(
+                      direction: FadeInDirection.leftToRight,
+                      delay: const Duration(milliseconds: 200),
+                      child: SizedBox(
+                        width: 380,
+                        child: Card(
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                            side: const BorderSide(color: AppColors.borderLight),
+                          ),
+                          color: AppColors.cardWhite,
+                          child: Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: _buildDirectoryList(),
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (!isMobile) const SizedBox(width: 20),
+
+                  // Map & Mobile Toggle Stack Side (Right Panel)
+                  Expanded(
+                    child: FadeInSlide(
+                      direction: FadeInDirection.rightToLeft,
+                      delay: const Duration(milliseconds: 300),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(24),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: AppColors.cardWhite,
+                            border: Border.all(color: AppColors.borderLight),
+                            borderRadius: BorderRadius.circular(24),
+                          ),
+                          child: Stack(
+                            children: [
+                              // The Interactive Map
+                              FlutterMap(
+                                mapController: _mapController,
+                                options: MapOptions(
+                                  initialCenter: _defaultCenter,
+                                  initialZoom: 13,
+                                ),
+                                children: [
+                                  TileLayer(
+                                    urlTemplate: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+                                    subdomains: const ['a', 'b', 'c', 'd'],
+                                  ),
+                                  MarkerLayer(
+                                    markers: _buildMapMarkers(),
+                                  ),
+                                ],
+                              ),
+
+                              // Map Controls overlay
+                              Positioned(
+                                right: 16,
+                                bottom: 16,
+                                child: Column(
+                                  children: [
+                                    _buildMapButton(
+                                      icon: Icons.add,
+                                      onPressed: () => _mapController.move(
+                                        _mapController.camera.center,
+                                        _mapController.camera.zoom + 1,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    _buildMapButton(
+                                      icon: Icons.remove,
+                                      onPressed: () => _mapController.move(
+                                        _mapController.camera.center,
+                                        _mapController.camera.zoom - 1,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    _buildMapButton(
+                                      icon: Icons.my_location,
+                                      onPressed: () => _animatedMapMove(_defaultCenter, 13.5),
+                                    ),
+                                  ],
+                                ),
+                              ),
+
+                              // Selected Bus Information Card popup overlay
+                              if (selectedBus != null && selectedBus.isNotEmpty)
+                                Positioned(
+                                  left: 16,
+                                  bottom: 16,
+                                  right: isMobile ? 80 : 16,
+                                  child: _buildSelectedBusDetailsCard(selectedBus),
+                                ),
+
+                              // Mobile Drawer/Directory Toggle
+                              if (isMobile)
+                                Positioned(
+                                  left: 16,
+                                  top: 16,
+                                  child: FloatingActionButton.small(
+                                    backgroundColor: AppColors.primaryNavy,
+                                    foregroundColor: Colors.white,
+                                    child: const Icon(Icons.menu),
+                                    onPressed: () {
+                                      showModalBottomSheet(
+                                        context: context,
+                                        isScrollControlled: true,
+                                        backgroundColor: Colors.transparent,
+                                        builder: (context) => DraggableScrollableSheet(
+                                          initialChildSize: 0.85,
+                                          minChildSize: 0.5,
+                                          maxChildSize: 0.95,
+                                          builder: (context, scrollController) => Container(
+                                            decoration: const BoxDecoration(
+                                              color: AppColors.backgroundLight,
+                                              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                                            ),
+                                            padding: const EdgeInsets.all(16),
+                                            child: Column(
+                                              children: [
+                                                Container(
+                                                  width: 40,
+                                                  height: 5,
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.grey[300],
+                                                    borderRadius: BorderRadius.circular(10),
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 16),
+                                                Expanded(
+                                                  child: _buildDirectoryList(),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
                 ],
               ),
-              if (!isMobile) _buildStatsBadges(),
-            ],
-          ),
-          const SizedBox(height: 20),
-          if (isMobile) ...[
-            _buildStatsBadges(),
-            const SizedBox(height: 16),
-          ],
-
-          // Split View layout
-          Expanded(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Directory List Side (Left Panel)
-                if (!isMobile)
-                  SizedBox(
-                    width: 380,
-                    child: Card(
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                        side: const BorderSide(color: AppColors.borderLight),
-                      ),
-                      color: AppColors.cardWhite,
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: _buildDirectoryList(),
-                      ),
-                    ),
-                  ),
-                if (!isMobile) const SizedBox(width: 20),
-
-                // Map & Mobile Toggle Stack Side (Right Panel)
-                Expanded(
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(24),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: AppColors.cardWhite,
-                        border: Border.all(color: AppColors.borderLight),
-                        borderRadius: BorderRadius.circular(24),
-                      ),
-                      child: Stack(
-                        children: [
-                          // The Interactive Map
-                          FlutterMap(
-                            mapController: _mapController,
-                            options: MapOptions(
-                              initialCenter: _defaultCenter,
-                              initialZoom: 13,
-                            ),
-                            children: [
-                              TileLayer(
-                                urlTemplate: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-                                subdomains: const ['a', 'b', 'c', 'd'],
-                              ),
-                              MarkerLayer(
-                                markers: _buildMapMarkers(),
-                              ),
-                            ],
-                          ),
-
-                          // Map Controls overlay
-                          Positioned(
-                            right: 16,
-                            bottom: 16,
-                            child: Column(
-                              children: [
-                                _buildMapButton(
-                                  icon: Icons.add,
-                                  onPressed: () => _mapController.move(
-                                    _mapController.camera.center,
-                                    _mapController.camera.zoom + 1,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                _buildMapButton(
-                                  icon: Icons.remove,
-                                  onPressed: () => _mapController.move(
-                                    _mapController.camera.center,
-                                    _mapController.camera.zoom - 1,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                _buildMapButton(
-                                  icon: Icons.my_location,
-                                  onPressed: () => _animatedMapMove(_defaultCenter, 13.5),
-                                ),
-                              ],
-                            ),
-                          ),
-
-                          // Selected Bus Information Card popup overlay
-                          if (selectedBus != null && selectedBus.isNotEmpty)
-                            Positioned(
-                              left: 16,
-                              bottom: 16,
-                              right: isMobile ? 80 : 16,
-                              child: _buildSelectedBusDetailsCard(selectedBus),
-                            ),
-
-                          // Mobile Drawer/Directory Toggle
-                          if (isMobile)
-                            Positioned(
-                              left: 16,
-                              top: 16,
-                              child: FloatingActionButton.small(
-                                backgroundColor: AppColors.primaryNavy,
-                                foregroundColor: Colors.white,
-                                child: const Icon(Icons.menu),
-                                onPressed: () {
-                                  showModalBottomSheet(
-                                    context: context,
-                                    isScrollControlled: true,
-                                    backgroundColor: Colors.transparent,
-                                    builder: (context) => DraggableScrollableSheet(
-                                      initialChildSize: 0.85,
-                                      minChildSize: 0.5,
-                                      maxChildSize: 0.95,
-                                      builder: (context, scrollController) => Container(
-                                        decoration: const BoxDecoration(
-                                          color: AppColors.backgroundLight,
-                                          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-                                        ),
-                                        padding: const EdgeInsets.all(16),
-                                        child: Column(
-                                          children: [
-                                            Container(
-                                              width: 40,
-                                              height: 5,
-                                              decoration: BoxDecoration(
-                                                color: Colors.grey[300],
-                                                borderRadius: BorderRadius.circular(10),
-                                              ),
-                                            ),
-                                            const SizedBox(height: 16),
-                                            Expanded(
-                                              child: _buildDirectoryList(),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ],
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -467,9 +557,9 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(30),
-        border: Border.all(color: color.withOpacity(0.2)),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -595,7 +685,14 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
                             ? DateTime.fromMillisecondsSinceEpoch(bus['lastUpdated'] as int)
                             : DateTime.now();
 
-                        return _buildBusListItem(bus, isSelected, speed, lastUpdated);
+                        return _BusListItem(
+                          bus: bus,
+                          isSelected: isSelected,
+                          speed: speed,
+                          lastUpdated: lastUpdated,
+                          matchedSchedule: _getMatchingSchedule(bus),
+                          onTap: () => _locateBus(bus),
+                        );
                       },
                     ),
         ),
@@ -603,160 +700,7 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
     );
   }
 
-  Widget _buildBusListItem(Map<String, dynamic> bus, bool isSelected, double speed, DateTime lastUpdated) {
-    final gender = (bus['gender'] ?? 'Combined').toString();
-    final genderColor = gender.toLowerCase() == 'girls'
-        ? Colors.pinkAccent
-        : (gender.toLowerCase() == 'boys' ? Colors.blueAccent : Colors.teal);
 
-    final matchedSchedule = _getMatchingSchedule(bus);
-
-    return InkWell(
-      onTap: () => _locateBus(bus),
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: isSelected ? AppColors.primaryNavy.withOpacity(0.04) : Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isSelected ? AppColors.primaryNavy : AppColors.borderLight,
-            width: isSelected ? 1.5 : 1.0,
-          ),
-        ),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                // Bus Icon badge
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: AppColors.primaryNavy.withOpacity(0.08),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.directions_bus_filled, color: AppColors.primaryNavy, size: 20),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text(
-                            'Bus #${bus['busNumber'] ?? 'N/A'}',
-                            style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textDark),
-                          ),
-                          const SizedBox(width: 6),
-                          // Gender Tag
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: genderColor.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              gender.toUpperCase(),
-                              style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: genderColor),
-                            ),
-                          ),
-                        ],
-                      ),
-                      Text(
-                        'Driver: ${bus['driverName'] ?? 'No Name'}',
-                        style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w500),
-                      ),
-                    ],
-                  ),
-                ),
-                // Pulse Animation Indicator
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: const BoxDecoration(
-                    color: Colors.green,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-              ],
-            ),
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 8),
-              child: Divider(height: 1, color: AppColors.borderLight),
-            ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Row(
-                    children: [
-                      const Icon(Icons.route_outlined, size: 14, color: AppColors.textSecondary),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          '${bus['from'] ?? 'Start'} ➔ ${bus['to'] ?? 'End'}',
-                          style: GoogleFonts.poppins(fontSize: 11, color: AppColors.textDark, fontWeight: FontWeight.w500),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Text(
-                  '${speed.toStringAsFixed(0)} km/h',
-                  style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primaryNavy),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            if (matchedSchedule != null)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppColors.primaryNavy.withOpacity(0.05),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.event_note_rounded, size: 12, color: AppColors.primaryNavy),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        'Schedule: ${matchedSchedule.departureTime ?? 'Live'} Run',
-                        style: GoogleFonts.poppins(fontSize: 10, color: AppColors.primaryNavy, fontWeight: FontWeight.bold),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              )
-            else
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.orange.withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.info_outline_rounded, size: 12, color: Colors.orange),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        'Ad-hoc/Unscheduled Run',
-                        style: GoogleFonts.poppins(fontSize: 10, color: Colors.orange[800], fontWeight: FontWeight.bold),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Widget _buildEmptyListState() {
     return Center(
@@ -782,7 +726,7 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
 
     return Card(
       elevation: 6,
-      shadowColor: Colors.black.withOpacity(0.15),
+      shadowColor: Colors.black.withValues(alpha: 0.15),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       color: Colors.white,
       child: Padding(
@@ -794,7 +738,7 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
             Row(
               children: [
                 CircleAvatar(
-                  backgroundColor: AppColors.primaryNavy.withOpacity(0.08),
+                  backgroundColor: AppColors.primaryNavy.withValues(alpha: 0.08),
                   radius: 20,
                   child: const Icon(Icons.directions_bus_outlined, color: AppColors.primaryNavy, size: 22),
                 ),
@@ -857,7 +801,7 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
-                  color: AppColors.primaryNavy.withOpacity(0.05),
+                  color: AppColors.primaryNavy.withValues(alpha: 0.05),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Row(
@@ -886,7 +830,7 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
-                  color: Colors.orange.withOpacity(0.08),
+                  color: Colors.orange.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Row(
@@ -960,7 +904,7 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
                   border: Border.all(color: isSelected ? AppColors.accentAmber : genderColor, width: 1.5),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
+                      color: Colors.black.withValues(alpha: 0.1),
                       blurRadius: 6,
                       offset: const Offset(0, 2),
                     ),
@@ -989,7 +933,7 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
                       border: Border.all(color: Colors.white, width: 2),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.15),
+                          color: Colors.black.withValues(alpha: 0.15),
                           blurRadius: 6,
                           offset: const Offset(0, 3),
                         ),
@@ -1012,7 +956,7 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
                           height: 38 * value,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            border: Border.all(color: AppColors.accentAmber.withOpacity(1.0 - (value - 0.8) / 0.6), width: 1.5),
+                            border: Border.all(color: AppColors.accentAmber.withValues(alpha: 1.0 - (value - 0.8) / 0.6), width: 1.5),
                           ),
                         );
                       },
@@ -1035,9 +979,9 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.primaryNavy.withOpacity(0.04),
+        color: AppColors.primaryNavy.withValues(alpha: 0.04),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.primaryNavy.withOpacity(0.1)),
+        border: Border.all(color: AppColors.primaryNavy.withValues(alpha: 0.1)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1050,7 +994,9 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
                   const Icon(Icons.event_note_rounded, color: AppColors.primaryNavy, size: 16),
                   const SizedBox(width: 6),
                   Text(
-                    "Today's Schedule Runs",
+                    DateFormat('yyyy-MM-dd').format(_selectedDate) == DateFormat('yyyy-MM-dd').format(DateTime.now())
+                        ? "Today's Schedule Runs"
+                        : "${DateFormat('MMM d').format(_selectedDate)} Schedule Runs",
                     style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textDark),
                   ),
                 ],
@@ -1072,6 +1018,321 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildCalendarSection() {
+    final days = _generateDaysInMonth(_currentMonth);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.borderLight),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.01),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.calendar_today_rounded, color: AppColors.primaryNavy, size: 18),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${_getMonthName(_currentMonth)} ${_currentMonth.year}',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textDark,
+                    ),
+                  ),
+                ],
+              ),
+              Row(
+                children: [
+                  IconButton(
+                    onPressed: () => _changeMonth(-1),
+                    icon: const Icon(Icons.chevron_left_rounded, size: 18),
+                    style: IconButton.styleFrom(
+                      backgroundColor: AppColors.backgroundLight,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      padding: EdgeInsets.zero,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  IconButton(
+                    onPressed: () => _changeMonth(1),
+                    icon: const Icon(Icons.chevron_right_rounded, size: 18),
+                    style: IconButton.styleFrom(
+                      backgroundColor: AppColors.backgroundLight,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      padding: EdgeInsets.zero,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 60,
+            child: ListView.builder(
+              controller: _calendarScrollController,
+              scrollDirection: Axis.horizontal,
+              itemCount: days.length,
+              itemBuilder: (context, index) {
+                final dayDate = days[index];
+                final isSelected = dayDate.day == _selectedDate.day &&
+                    dayDate.month == _selectedDate.month &&
+                    dayDate.year == _selectedDate.year;
+
+                return GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _selectedDate = dayDate;
+                    });
+                  },
+                  child: Container(
+                    width: 50,
+                    margin: const EdgeInsets.only(right: 8),
+                    decoration: BoxDecoration(
+                      color: isSelected ? AppColors.primaryNavy : Colors.transparent,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: isSelected ? Colors.transparent : AppColors.borderLight,
+                      ),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          _getWeekdayName(dayDate).substring(0, 3).toUpperCase(),
+                          style: TextStyle(
+                            fontSize: 8,
+                            fontWeight: FontWeight.w800,
+                            color: isSelected ? Colors.white70 : AppColors.textSecondary,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          dayDate.day.toString(),
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: isSelected ? Colors.white : AppColors.textDark,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BusListItem extends StatefulWidget {
+  final Map<String, dynamic> bus;
+  final bool isSelected;
+  final double speed;
+  final DateTime lastUpdated;
+  final BusSchedule? matchedSchedule;
+  final VoidCallback onTap;
+
+  const _BusListItem({
+    required this.bus,
+    required this.isSelected,
+    required this.speed,
+    required this.lastUpdated,
+    this.matchedSchedule,
+    required this.onTap,
+  });
+
+  @override
+  State<_BusListItem> createState() => _BusListItemState();
+}
+
+class _BusListItemState extends State<_BusListItem> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final gender = (widget.bus['gender'] ?? 'Combined').toString();
+    final genderColor = gender.toLowerCase() == 'girls'
+        ? Colors.pinkAccent
+        : (gender.toLowerCase() == 'boys' ? Colors.blueAccent : Colors.teal);
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: InkWell(
+        onTap: widget.onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: widget.isSelected || _isHovered 
+                ? AppColors.primaryNavy.withValues(alpha: 0.04) 
+                : Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: widget.isSelected ? AppColors.primaryNavy : (_isHovered ? AppColors.primaryNavy.withValues(alpha: 0.3) : AppColors.borderLight),
+              width: widget.isSelected ? 1.5 : 1.0,
+            ),
+            boxShadow: _isHovered ? [
+              BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4)),
+            ] : null,
+          ),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  // Bus Icon badge
+                  AnimatedScale(
+                    scale: _isHovered ? 1.1 : 1.0,
+                    duration: const Duration(milliseconds: 200),
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryNavy.withValues(alpha: 0.08),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.directions_bus_filled, color: AppColors.primaryNavy, size: 20),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              'Bus #${widget.bus['busNumber'] ?? 'N/A'}',
+                              style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textDark),
+                            ),
+                            const SizedBox(width: 6),
+                            // Gender Tag
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: genderColor.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                gender.toUpperCase(),
+                                style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: genderColor),
+                              ),
+                            ),
+                          ],
+                        ),
+                        Text(
+                          'Driver: ${widget.bus['driverName'] ?? 'No Name'}',
+                          style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w500),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Pulse Animation Indicator
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(
+                      color: Colors.green,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ],
+              ),
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: Divider(height: 1, color: AppColors.borderLight),
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Row(
+                      children: [
+                        const Icon(Icons.route_outlined, size: 14, color: AppColors.textSecondary),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            '${widget.bus['from'] ?? 'Start'} ➔ ${widget.bus['to'] ?? 'End'}',
+                            style: GoogleFonts.poppins(fontSize: 11, color: AppColors.textDark, fontWeight: FontWeight.w500),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Text(
+                    '${widget.speed.toStringAsFixed(0)} km/h',
+                    style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primaryNavy),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              if (widget.matchedSchedule != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryNavy.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.event_note_rounded, size: 12, color: AppColors.primaryNavy),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Schedule: ${widget.matchedSchedule!.departureTime ?? 'Live'} Run',
+                          style: GoogleFonts.poppins(fontSize: 10, color: AppColors.primaryNavy, fontWeight: FontWeight.bold),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.info_outline_rounded, size: 12, color: Colors.orange),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Ad-hoc/Unscheduled Run',
+                          style: GoogleFonts.poppins(fontSize: 10, color: Colors.orange[800], fontWeight: FontWeight.bold),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }

@@ -15,6 +15,7 @@ import 'package:unitransit_admin/models/hub_model.dart';
 import 'package:unitransit_admin/models/stop_model.dart';
 import 'package:unitransit_admin/core/utils/responsive_util.dart';
 import 'package:unitransit_admin/view_models/route_planning_view_model.dart';
+import 'package:unitransit_admin/core/utils/animations.dart';
 
 class RoutePlanningScreen extends StatefulWidget {
   const RoutePlanningScreen({super.key});
@@ -42,24 +43,68 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> with SingleTi
   Widget build(BuildContext context) {
     final isMobile = AppResponsiveUtil.isMobile(context);
     
-    return Container(
-      padding: EdgeInsets.all(isMobile ? 16.0 : 32.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return FadeInSlide(
+      duration: const Duration(milliseconds: 600),
+      child: Container(
+        padding: EdgeInsets.all(isMobile ? 16.0 : 32.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildHeader(context),
+            const SizedBox(height: 24),
+            _buildTabBar(),
+            const SizedBox(height: 24),
+            Expanded(
+              child: TabBarView(
+                controller: _tabController,
+                children: const [
+                  HubsManagerSection(),
+                  RouteDefinitionSection(),
+                  StopsManagerSection(),
+                  PolylineUploaderSection(),
+                  MapPreviewSection(),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader(BuildContext context) {
+    final isMobile = AppResponsiveUtil.isMobile(context);
+    return FadeInSlide(
+      direction: FadeInDirection.leftToRight,
+      child: Row(
         children: [
-          _buildHeader(context),
-          const SizedBox(height: 24),
-          _buildTabBar(),
-          const SizedBox(height: 24),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppColors.primaryNavy.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(Icons.map_rounded, color: AppColors.primaryNavy, size: isMobile ? 20 : 28),
+          ),
+          const SizedBox(width: 16),
           Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: const [
-                HubsManagerSection(),
-                RouteDefinitionSection(),
-                StopsManagerSection(),
-                PolylineUploaderSection(),
-                MapPreviewSection(),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Route & Map',
+                  style: GoogleFonts.poppins(
+                    fontSize: isMobile ? 20 : 28,
+                    fontWeight: FontWeight.w900,
+                    color: AppColors.textDark,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                if (!isMobile)
+                  Text(
+                    'Configure campuses, define routes, and manage map paths.',
+                    style: GoogleFonts.poppins(color: AppColors.textSecondary.withValues(alpha: 0.7), fontSize: 13),
+                  ),
               ],
             ),
           ),
@@ -68,69 +113,35 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> with SingleTi
     );
   }
 
-  Widget _buildHeader(BuildContext context) {
-    final isMobile = AppResponsiveUtil.isMobile(context);
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: AppColors.primaryNavy.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Icon(Icons.map_rounded, color: AppColors.primaryNavy, size: isMobile ? 20 : 28),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Route & Map',
-                style: GoogleFonts.poppins(
-                  fontSize: isMobile ? 20 : 28,
-                  fontWeight: FontWeight.w900,
-                  color: AppColors.textDark,
-                  letterSpacing: -0.5,
-                ),
-              ),
-              if (!isMobile)
-                Text(
-                  'Configure campuses, define routes, and manage map paths.',
-                  style: GoogleFonts.poppins(color: AppColors.textSecondary.withValues(alpha: 0.7), fontSize: 13),
-                ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildTabBar() {
-    return Container(
-      height: 54,
-      decoration: BoxDecoration(
-        color: AppColors.backgroundLight,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: TabBar(
-        controller: _tabController,
-        labelColor: Colors.white,
-        unselectedLabelColor: AppColors.textSecondary,
-        indicator: BoxDecoration(
-          color: AppColors.primaryNavy,
-          borderRadius: BorderRadius.circular(10),
+    return FadeInSlide(
+      direction: FadeInDirection.leftToRight,
+      delay: const Duration(milliseconds: 100),
+      child: Container(
+        height: 54,
+        decoration: BoxDecoration(
+          color: AppColors.backgroundLight,
+          borderRadius: BorderRadius.circular(12),
         ),
-        indicatorSize: TabBarIndicatorSize.tab,
-        dividerColor: Colors.transparent,
-        labelStyle: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 13),
-        tabs: const [
-          Tab(text: 'Hubs'),
-          Tab(text: 'Routes'),
-          Tab(text: 'Stops'),
-          Tab(text: 'Paths'),
-          Tab(text: 'Map Preview'),
-        ],
+        child: TabBar(
+          controller: _tabController,
+          labelColor: Colors.white,
+          unselectedLabelColor: AppColors.textSecondary,
+          indicator: BoxDecoration(
+            color: AppColors.primaryNavy,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          indicatorSize: TabBarIndicatorSize.tab,
+          dividerColor: Colors.transparent,
+          labelStyle: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 13),
+          tabs: const [
+            Tab(text: 'Hubs'),
+            Tab(text: 'Routes'),
+            Tab(text: 'Stops'),
+            Tab(text: 'Paths'),
+            Tab(text: 'Map Preview'),
+          ],
+        ),
       ),
     );
   }
@@ -239,6 +250,9 @@ class HubsManagerSection extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: AppColors.borderLight),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10, offset: const Offset(0, 4)),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -263,7 +277,7 @@ class HubsManagerSection extends StatelessWidget {
                 separatorBuilder: (_, __) => const SizedBox(height: 12),
                 itemBuilder: (context, index) {
                   final hub = hubs[index];
-                  return _buildHubCard(context, hub, viewModel);
+                  return _HubCard(hub: hub, viewModel: viewModel);
                 },
               );
             },
@@ -272,34 +286,57 @@ class HubsManagerSection extends StatelessWidget {
       ),
     );
   }
+}
 
-  Widget _buildHubCard(BuildContext context, HubModel hub, RoutePlanningViewModel viewModel) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.backgroundLight.withValues(alpha: 0.3),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.borderLight),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.location_on_rounded, color: Colors.green.withValues(alpha: 0.7), size: 20),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(hub.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                Text('${hub.latitude}, ${hub.longitude}', style: const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
-              ],
+class _HubCard extends StatefulWidget {
+  final HubModel hub;
+  final RoutePlanningViewModel viewModel;
+  const _HubCard({required this.hub, required this.viewModel});
+
+  @override
+  State<_HubCard> createState() => _HubCardState();
+}
+
+class _HubCardState extends State<_HubCard> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: _isHovered ? AppColors.primaryNavy.withValues(alpha: 0.02) : AppColors.backgroundLight.withValues(alpha: 0.3),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: _isHovered ? AppColors.primaryNavy.withValues(alpha: 0.2) : AppColors.borderLight),
+        ),
+        child: Row(
+          children: [
+            AnimatedScale(
+              scale: _isHovered ? 1.1 : 1.0,
+              duration: const Duration(milliseconds: 200),
+              child: Icon(Icons.location_on_rounded, color: Colors.green.withValues(alpha: 0.7), size: 20),
             ),
-          ),
-          _buildActionMenu(context, 
-            onEdit: () => viewModel.setEditingHub(hub),
-            onDelete: () => viewModel.deleteHub(hub.name),
-            deleteMsg: 'Delete this hub?'
-          ),
-        ],
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(widget.hub.name, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: _isHovered ? AppColors.primaryNavy : AppColors.textDark)),
+                  Text('${widget.hub.latitude}, ${widget.hub.longitude}', style: const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                ],
+              ),
+            ),
+            _buildActionMenu(context, 
+              onEdit: () => widget.viewModel.setEditingHub(widget.hub),
+              onDelete: () => widget.viewModel.deleteHub(widget.hub.name),
+              deleteMsg: 'Delete this hub?'
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -389,6 +426,9 @@ class RouteDefinitionSection extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: AppColors.borderLight),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10, offset: const Offset(0, 4)),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -413,7 +453,7 @@ class RouteDefinitionSection extends StatelessWidget {
                 separatorBuilder: (_, __) => const SizedBox(height: 12),
                 itemBuilder: (context, index) {
                   final route = schedules[index];
-                  return _buildRouteCard(context, route, viewModel);
+                  return _RouteCard(route: route, viewModel: viewModel);
                 },
               );
             },
@@ -422,39 +462,58 @@ class RouteDefinitionSection extends StatelessWidget {
       ),
     );
   }
+}
 
-  Widget _buildRouteCard(BuildContext context, BusSchedule route, RoutePlanningViewModel viewModel) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.borderLight),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(route.route, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Text(route.from, style: const TextStyle(color: Colors.green, fontSize: 12, fontWeight: FontWeight.w600)),
-                    const Icon(Icons.arrow_right_alt, size: 16, color: AppColors.textSecondary),
-                    Text(route.to, style: const TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.w600)),
-                  ],
-                ),
-              ],
+class _RouteCard extends StatefulWidget {
+  final BusSchedule route;
+  final RoutePlanningViewModel viewModel;
+  const _RouteCard({required this.route, required this.viewModel});
+
+  @override
+  State<_RouteCard> createState() => _RouteCardState();
+}
+
+class _RouteCardState extends State<_RouteCard> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: _isHovered ? AppColors.primaryNavy.withValues(alpha: 0.02) : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: _isHovered ? AppColors.primaryNavy.withValues(alpha: 0.2) : AppColors.borderLight),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(widget.route.route, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: _isHovered ? AppColors.primaryNavy : AppColors.textDark)),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Text(widget.route.from, style: const TextStyle(color: Colors.green, fontSize: 12, fontWeight: FontWeight.w600)),
+                      const Icon(Icons.arrow_right_alt, size: 16, color: AppColors.textSecondary),
+                      Text(widget.route.to, style: const TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-          _buildActionMenu(context, 
-            onEdit: () => viewModel.setEditingRoute(route),
-            onDelete: () => viewModel.deleteRoute(route.id, route.route),
-            deleteMsg: 'Delete this route?'
-          ),
-        ],
+            _buildActionMenu(context, 
+              onEdit: () => widget.viewModel.setEditingRoute(widget.route),
+              onDelete: () => widget.viewModel.deleteRoute(widget.route.id, widget.route.route),
+              deleteMsg: 'Delete this route?'
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1416,6 +1475,9 @@ class StopsManagerSection extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: AppColors.borderLight),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10, offset: const Offset(0, 4)),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1440,44 +1502,71 @@ class StopsManagerSection extends StatelessWidget {
                 separatorBuilder: (_, __) => const SizedBox(height: 12),
                 itemBuilder: (context, index) {
                   final stop = stops[index];
-                  return Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: AppColors.backgroundLight.withValues(alpha: 0.3),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: AppColors.borderLight),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
-                          child: const Icon(Icons.radio_button_checked_rounded, color: Colors.grey, size: 18),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(stop.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                              Text('Route: ${stop.route}', style: const TextStyle(color: AppColors.primaryNavy, fontSize: 11, fontWeight: FontWeight.w600)),
-                              Text('${stop.latitude}, ${stop.longitude}', style: const TextStyle(color: AppColors.textSecondary, fontSize: 10)),
-                            ],
-                          ),
-                        ),
-                        _buildActionMenu(context, 
-                          onEdit: () => viewModel.setEditingStop(stop),
-                          onDelete: () => viewModel.deleteStop(stop.id),
-                          deleteMsg: 'Delete this stop?'
-                        ),
-                      ],
-                    ),
-                  );
+                  return _StopCard(stop: stop, viewModel: viewModel);
                 },
               );
             },
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _StopCard extends StatefulWidget {
+  final StopModel stop;
+  final RoutePlanningViewModel viewModel;
+  const _StopCard({required this.stop, required this.viewModel});
+
+  @override
+  State<_StopCard> createState() => _StopCardState();
+}
+
+class _StopCardState extends State<_StopCard> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: _isHovered ? AppColors.primaryNavy.withValues(alpha: 0.02) : AppColors.backgroundLight.withValues(alpha: 0.3),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: _isHovered ? AppColors.primaryNavy.withValues(alpha: 0.2) : AppColors.borderLight),
+        ),
+        child: Row(
+          children: [
+            AnimatedScale(
+              scale: _isHovered ? 1.1 : 1.0,
+              duration: const Duration(milliseconds: 200),
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
+                child: const Icon(Icons.radio_button_checked_rounded, color: Colors.grey, size: 18),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(widget.stop.name, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: _isHovered ? AppColors.primaryNavy : AppColors.textDark)),
+                  Text('Route: ${widget.stop.route}', style: const TextStyle(color: AppColors.primaryNavy, fontSize: 11, fontWeight: FontWeight.w600)),
+                  Text('${widget.stop.latitude}, ${widget.stop.longitude}', style: const TextStyle(color: AppColors.textSecondary, fontSize: 10)),
+                ],
+              ),
+            ),
+            _buildActionMenu(context, 
+              onEdit: () => widget.viewModel.setEditingStop(widget.stop),
+              onDelete: () => widget.viewModel.deleteStop(widget.stop.id),
+              deleteMsg: 'Delete this stop?'
+            ),
+          ],
+        ),
       ),
     );
   }
