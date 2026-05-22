@@ -38,6 +38,7 @@ class DriversViewModel extends ChangeNotifier {
     required String license,
     required DateTime expiry,
     required String bus,
+    List<String> assignedRoutes = const [],
     required String experience,
     Uint8List? profileImage,
     Uint8List? frontImage,
@@ -80,6 +81,7 @@ class DriversViewModel extends ChangeNotifier {
         licenseNumber: license,
         licenseExpiry: expiry,
         assignedBus: bus,
+        assignedRoutes: assignedRoutes,
         experience: experience,
         status: 'Offline',
         profileUrl: profileUrl,
@@ -102,7 +104,7 @@ class DriversViewModel extends ChangeNotifier {
         'email': email,
         'role': 'Driver',
         'createdAt': FieldValue.serverTimestamp(),
-      });
+      }, SetOptions(merge: true));
 
       // Verification Step: Immediately try to read it back
       final verifyDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 import 'package:unitransit_admin/core/constants/app_colors.dart';
+import 'package:unitransit_admin/core/constants/app_assets.dart';
 import 'package:unitransit_admin/view_models/dashboard_view_model.dart';
 import 'package:unitransit_admin/view_models/login_view_model.dart';
 import 'package:unitransit_admin/views/login_screen.dart';
@@ -32,24 +33,14 @@ class Sidebar extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [primaryColor, primaryColor.withOpacity(0.7)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(14),
-                    boxShadow: [
-                      BoxShadow(
-                        color: primaryColor.withOpacity(0.3),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.asset(
+                    AppAssets.unitransitLogo,
+                    width: 48,
+                    height: 48,
+                    fit: BoxFit.contain,
                   ),
-                  child: const Icon(Icons.directions_bus_rounded, color: Colors.white, size: 28),
                 ),
                 const SizedBox(width: 16),
                 Column(
@@ -82,19 +73,21 @@ class Sidebar extends StatelessWidget {
                 _buildMenuItem(context, 0, Icons.dashboard_rounded, 'Dashboard', primaryColor, accentColor),
                 _buildMenuItem(context, 1, Icons.people_alt_rounded, 'Students', primaryColor, accentColor),
                 _buildMenuItem(context, 2, Icons.drive_eta_rounded, 'Drivers', primaryColor, accentColor),
+                _buildMenuItem(context, 13, Icons.add_road_rounded, 'Assign Routes', primaryColor, accentColor),
                 
                 // Super Admin Only: Admins Management (Index 3)
                 if (isSuperAdmin) ...[
                   _buildMenuItem(context, 3, Icons.admin_panel_settings_rounded, 'Manage Admins', primaryColor, accentColor),
                 ],
                 
-                _buildMenuItem(context, 4, Icons.directions_bus_rounded, 'Fleet Operations', primaryColor, accentColor),
                 _buildMenuItem(context, 5, Icons.map_rounded, 'Route Planning', primaryColor, accentColor),
+                _buildMenuItem(context, 11, Icons.calendar_today_rounded, 'Bus Schedules', primaryColor, accentColor),
                 
-                // Super Admin Only: Gender Config (Index 6)
-                if (isSuperAdmin) ...[
-                  _buildMenuItem(context, 6, Icons.category_rounded, 'Gender Config', primaryColor, accentColor),
-                ],
+                // Gender Config (Index 6)
+                _buildMenuItem(context, 6, Icons.category_rounded, 'Gender Config', primaryColor, accentColor),
+                
+                _buildMenuItem(context, 4, Icons.directions_bus_rounded, 'Live Bus Tracking', primaryColor, accentColor),
+                _buildMenuItem(context, 12, Icons.warning_amber_rounded, 'Emergency SOS', primaryColor, Colors.redAccent),
                 
                 _buildMenuItem(context, 7, Icons.history_rounded, 'Trip History', primaryColor, accentColor),
                 _buildMenuItem(context, 8, Icons.notifications_active_rounded, 'Notifications', primaryColor, accentColor),
@@ -172,13 +165,20 @@ class Sidebar extends StatelessWidget {
   Widget _buildMenuItem(BuildContext context, int index, IconData icon, String title, Color primaryColor, Color accentColor) {
     final viewModel = context.watch<DashboardViewModel>();
     final isActive = viewModel.selectedIndex == index;
+    final itemAccentColor = index == 12 ? Colors.redAccent : accentColor;
+    final itemBgColor = isActive 
+        ? (index == 12 ? Colors.redAccent.withOpacity(0.12) : primaryColor.withOpacity(0.12))
+        : Colors.transparent;
+    final itemBorderColor = isActive
+        ? (index == 12 ? Colors.redAccent.withOpacity(0.2) : primaryColor.withOpacity(0.2))
+        : null;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: isActive ? primaryColor.withOpacity(0.12) : Colors.transparent,
+        color: itemBgColor,
         borderRadius: BorderRadius.circular(12),
-        border: isActive ? Border.all(color: primaryColor.withOpacity(0.2)) : null,
+        border: itemBorderColor != null ? Border.all(color: itemBorderColor) : null,
       ),
       child: ListTile(
         onTap: () {
@@ -190,7 +190,7 @@ class Sidebar extends StatelessWidget {
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         leading: Icon(
           icon,
-          color: isActive ? accentColor : AppColors.textSecondary,
+          color: index == 12 ? Colors.redAccent : (isActive ? itemAccentColor : AppColors.textSecondary),
           size: 22,
         ),
         title: Text(
@@ -201,14 +201,64 @@ class Sidebar extends StatelessWidget {
             fontSize: 14,
           ),
         ),
-        trailing: isActive ? Container(
-          width: 6,
-          height: 6,
-          decoration: BoxDecoration(
-            color: accentColor,
-            shape: BoxShape.circle,
-          ),
-        ) : null,
+        trailing: isActive 
+            ? Container(
+                width: 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: itemAccentColor,
+                  shape: BoxShape.circle,
+                ),
+              ) 
+            : (index == 12 && viewModel.activeEmergencyAlerts > 0)
+                ? Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.redAccent,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      viewModel.activeEmergencyAlerts.toString(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  )
+                : (index == 8 && viewModel.unreadNotificationsCount > 0)
+                    ? Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          viewModel.unreadNotificationsCount.toString(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      )
+                    : (index == 9 && viewModel.pendingAlerts > 0)
+                        ? Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.orange,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              viewModel.pendingAlerts.toString(),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          )
+                        : null,
       ),
     );
   }

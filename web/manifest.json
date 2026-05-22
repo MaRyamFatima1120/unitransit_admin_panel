@@ -1,11 +1,11 @@
 {
-    "name": "unitransit_admin",
-    "short_name": "unitransit_admin",
+    "name": "Uni-Transit Admin Panel",
+    "short_name": "Uni-Transit Admin",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#1A237E",
+    "theme_color": "#1A237E",
+    "description": "A premium administration dashboard for managing Uni-Transit fleet, routes, and schedules.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
