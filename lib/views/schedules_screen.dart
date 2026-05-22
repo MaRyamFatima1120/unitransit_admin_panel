@@ -153,44 +153,85 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
                 // Header & Action Bar
                 Padding(
                   padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Bus Schedules',
-                            style: GoogleFonts.poppins(
-                              fontSize: 28,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.textDark,
+                  child: AppResponsiveUtil.isMobile(context)
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Bus Schedules',
+                              style: GoogleFonts.poppins(
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.textDark,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Manage and assign schedules grouped by time and routes',
-                            style: GoogleFonts.poppins(
-                              fontSize: 14,
-                              color: AppColors.textSecondary,
+                            const SizedBox(height: 4),
+                            Text(
+                              'Manage and assign schedules grouped by time and routes',
+                              style: GoogleFonts.poppins(
+                                fontSize: 13,
+                                color: AppColors.textSecondary,
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                      ElevatedButton.icon(
-                        onPressed: () => _showAddEditScheduleDialog(context, firebaseService),
-                        icon: const Icon(Icons.add_rounded, size: 20),
-                        label: Text('Create Schedule', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primaryNavy,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          elevation: 2,
+                            const SizedBox(height: 16),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: () => _showAddEditScheduleDialog(context, firebaseService),
+                                icon: const Icon(Icons.add_rounded, size: 20),
+                                label: Text('Create Schedule', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.primaryNavy,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                  elevation: 2,
+                                ),
+                              ),
+                            ),
+                          ],
+                        )
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Bus Schedules',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 28,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.textDark,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Manage and assign schedules grouped by time and routes',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 14,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            ElevatedButton.icon(
+                              onPressed: () => _showAddEditScheduleDialog(context, firebaseService),
+                              icon: const Icon(Icons.add_rounded, size: 20),
+                              label: Text('Create Schedule', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primaryNavy,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                elevation: 2,
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                    ],
-                  ),
                 ),
 
                 const SizedBox(height: 24),
@@ -353,78 +394,148 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
                 // Filters Row & Active Info
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      // Selected Date Info Banner
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: AppColors.primaryNavy.withOpacity(0.08),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Text(
-                              '${_getWeekdayName(_selectedDate)}, ${_getMonthName(_selectedDate)} ${_selectedDate.day}',
-                              style: GoogleFonts.poppins(
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.primaryNavy,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      // Filter Badges - dynamically loaded from Gender Config
-                      Row(
-                        children: ['All', ..._genderConfigs.keys].map((filter) {
-                          final isSelected = _selectedTypeFilter == filter;
-                          // Parse color from gender config hex, default to navy
-                          Color chipColor = AppColors.primaryNavy;
-                          if (filter != 'All' && _genderConfigs.containsKey(filter)) {
-                            try {
-                              chipColor = Color(int.parse(
-                                _genderConfigs[filter]!.replaceFirst('#', '0xFF')
-                              ));
-                            } catch (_) {}
-                          }
-                          return GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                _selectedTypeFilter = filter;
-                              });
-                            },
-                            child: Container(
-                              margin: const EdgeInsets.only(left: 8),
+                  child: AppResponsiveUtil.isMobile(context)
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
                               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                               decoration: BoxDecoration(
-                                color: isSelected
-                                    ? (filter == 'All' ? AppColors.accentAmber : chipColor.withOpacity(0.15))
-                                    : AppColors.cardWhite,
+                                color: AppColors.primaryNavy.withOpacity(0.08),
                                 borderRadius: BorderRadius.circular(10),
-                                border: Border.all(
-                                  color: isSelected
-                                      ? (filter == 'All' ? Colors.transparent : chipColor.withOpacity(0.5))
-                                      : AppColors.borderLight,
-                                ),
                               ),
                               child: Text(
-                                filter,
+                                '${_getWeekdayName(_selectedDate)}, ${_getMonthName(_selectedDate)} ${_selectedDate.day}',
                                 style: GoogleFonts.poppins(
                                   fontWeight: FontWeight.bold,
-                                  fontSize: 12,
-                                  color: isSelected
-                                      ? (filter == 'All' ? AppColors.textDark : chipColor)
-                                      : AppColors.textSecondary,
+                                  color: AppColors.primaryNavy,
+                                  fontSize: 13,
                                 ),
                               ),
                             ),
-                          );
-                        }).toList(),
-                      ),
-                    ],
-                  ),
+                            const SizedBox(height: 12),
+                            SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: Row(
+                                children: ['All', ..._genderConfigs.keys].map((filter) {
+                                  final isSelected = _selectedTypeFilter == filter;
+                                  Color chipColor = AppColors.primaryNavy;
+                                  if (filter != 'All' && _genderConfigs.containsKey(filter)) {
+                                    try {
+                                      chipColor = Color(int.parse(
+                                        _genderConfigs[filter]!.replaceFirst('#', '0xFF')
+                                      ));
+                                    } catch (_) {}
+                                  }
+                                  return GestureDetector(
+                                    onTap: () {
+                                      setState(() {
+                                        _selectedTypeFilter = filter;
+                                      });
+                                    },
+                                    child: Container(
+                                      margin: const EdgeInsets.only(right: 8),
+                                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                      decoration: BoxDecoration(
+                                        color: isSelected
+                                            ? (filter == 'All' ? AppColors.accentAmber : chipColor.withOpacity(0.15))
+                                            : AppColors.cardWhite,
+                                        borderRadius: BorderRadius.circular(10),
+                                        border: Border.all(
+                                          color: isSelected
+                                              ? (filter == 'All' ? Colors.transparent : chipColor.withOpacity(0.5))
+                                              : AppColors.borderLight,
+                                        ),
+                                      ),
+                                      child: Text(
+                                        filter,
+                                        style: GoogleFonts.poppins(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                          color: isSelected
+                                              ? (filter == 'All' ? AppColors.textDark : chipColor)
+                                              : AppColors.textSecondary,
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                            ),
+                          ],
+                        )
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            // Selected Date Info Banner
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primaryNavy.withOpacity(0.08),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    '${_getWeekdayName(_selectedDate)}, ${_getMonthName(_selectedDate)} ${_selectedDate.day}',
+                                    style: GoogleFonts.poppins(
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.primaryNavy,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            // Filter Badges - dynamically loaded from Gender Config
+                            Row(
+                              children: ['All', ..._genderConfigs.keys].map((filter) {
+                                final isSelected = _selectedTypeFilter == filter;
+                                // Parse color from gender config hex, default to navy
+                                Color chipColor = AppColors.primaryNavy;
+                                if (filter != 'All' && _genderConfigs.containsKey(filter)) {
+                                  try {
+                                    chipColor = Color(int.parse(
+                                      _genderConfigs[filter]!.replaceFirst('#', '0xFF')
+                                    ));
+                                  } catch (_) {}
+                                }
+                                return GestureDetector(
+                                  onTap: () {
+                                    setState(() {
+                                      _selectedTypeFilter = filter;
+                                    });
+                                  },
+                                  child: Container(
+                                    margin: const EdgeInsets.only(left: 8),
+                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                    decoration: BoxDecoration(
+                                      color: isSelected
+                                          ? (filter == 'All' ? AppColors.accentAmber : chipColor.withOpacity(0.15))
+                                          : AppColors.cardWhite,
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(
+                                        color: isSelected
+                                            ? (filter == 'All' ? Colors.transparent : chipColor.withOpacity(0.5))
+                                            : AppColors.borderLight,
+                                      ),
+                                    ),
+                                    child: Text(
+                                      filter,
+                                      style: GoogleFonts.poppins(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12,
+                                        color: isSelected
+                                            ? (filter == 'All' ? AppColors.textDark : chipColor)
+                                            : AppColors.textSecondary,
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                          ],
+                        ),
                 ),
 
                 const SizedBox(height: 16),
@@ -581,7 +692,11 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: ConstrainedBox(
-              constraints: BoxConstraints(minWidth: MediaQuery.of(context).size.width - 350),
+              constraints: BoxConstraints(
+                minWidth: AppResponsiveUtil.isMobile(context)
+                    ? MediaQuery.of(context).size.width - 48
+                    : MediaQuery.of(context).size.width - 350,
+              ),
               child: DataTable(
                 headingRowColor: WidgetStateProperty.all(AppColors.backgroundLight.withOpacity(0.4)),
                 horizontalMargin: 20,
@@ -854,11 +969,11 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
               backgroundColor: Colors.white,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
               child: Container(
-                width: 650,
+                width: AppResponsiveUtil.isMobile(context) ? MediaQuery.of(context).size.width * 0.95 : 650,
                 constraints: BoxConstraints(
                   maxHeight: MediaQuery.of(context).size.height * 0.85,
                 ),
-                padding: const EdgeInsets.all(28),
+                padding: EdgeInsets.all(AppResponsiveUtil.isMobile(context) ? 16 : 28),
                 child: Form(
                   key: formKey,
                   child: SingleChildScrollView(
@@ -869,12 +984,15 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(
-                              isEdit ? 'Edit Bus Schedule' : 'Create New Schedule',
-                              style: GoogleFonts.poppins(
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.textDark,
+                            Expanded(
+                              child: Text(
+                                isEdit ? 'Edit Bus Schedule' : 'Create New Schedule',
+                                style: GoogleFonts.poppins(
+                                  fontSize: AppResponsiveUtil.isMobile(context) ? 18 : 22,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.textDark,
+                                ),
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                             IconButton(
@@ -889,56 +1007,94 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
                         const Divider(height: 32),
 
                         // Form Section: From ➔ To
-                        Row(
+                        Flex(
+                          direction: AppResponsiveUtil.isMobile(context) ? Axis.vertical : Axis.horizontal,
                           children: [
-                            Expanded(
-                              child: _buildTextField(
+                            if (AppResponsiveUtil.isMobile(context))
+                              _buildTextField(
                                 label: 'Start Campus / Hub',
                                 controller: fromController,
                                 icon: Icons.radio_button_checked,
                                 iconColor: Colors.green,
                                 validator: (val) => val == null || val.trim().isEmpty ? 'Start hub required' : null,
+                              )
+                            else
+                              Expanded(
+                                child: _buildTextField(
+                                  label: 'Start Campus / Hub',
+                                  controller: fromController,
+                                  icon: Icons.radio_button_checked,
+                                  iconColor: Colors.green,
+                                  validator: (val) => val == null || val.trim().isEmpty ? 'Start hub required' : null,
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: _buildTextField(
+                            if (AppResponsiveUtil.isMobile(context)) const SizedBox(height: 16) else const SizedBox(width: 16),
+                            if (AppResponsiveUtil.isMobile(context))
+                              _buildTextField(
                                 label: 'Destination Campus / Hub',
                                 controller: toController,
                                 icon: Icons.location_on,
                                 iconColor: AppColors.error,
                                 validator: (val) => val == null || val.trim().isEmpty ? 'Destination required' : null,
+                              )
+                            else
+                              Expanded(
+                                child: _buildTextField(
+                                  label: 'Destination Campus / Hub',
+                                  controller: toController,
+                                  icon: Icons.location_on,
+                                  iconColor: AppColors.error,
+                                  validator: (val) => val == null || val.trim().isEmpty ? 'Destination required' : null,
+                                ),
                               ),
-                            ),
                           ],
                         ),
                         const SizedBox(height: 16),
 
                         // Form Section: Time, Bus ID, Type
-                        Row(
+                        Flex(
+                          direction: AppResponsiveUtil.isMobile(context) ? Axis.vertical : Axis.horizontal,
                           children: [
-                            Expanded(
-                              child: _buildTextField(
+                            if (AppResponsiveUtil.isMobile(context))
+                              _buildTextField(
                                 label: 'Departure Time',
                                 controller: departureTimeController,
                                 icon: Icons.access_time_rounded,
                                 hint: 'e.g., 08:30 AM',
                                 validator: (val) => val == null || val.trim().isEmpty ? 'Time required' : null,
+                              )
+                            else
+                              Expanded(
+                                child: _buildTextField(
+                                  label: 'Departure Time',
+                                  controller: departureTimeController,
+                                  icon: Icons.access_time_rounded,
+                                  hint: 'e.g., 08:30 AM',
+                                  validator: (val) => val == null || val.trim().isEmpty ? 'Time required' : null,
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: _buildTextField(
+                            if (AppResponsiveUtil.isMobile(context)) const SizedBox(height: 16) else const SizedBox(width: 16),
+                            if (AppResponsiveUtil.isMobile(context))
+                              _buildTextField(
                                 label: 'Bus ID / Number',
                                 controller: busIdController,
                                 icon: Icons.directions_bus_outlined,
                                 hint: 'e.g., 1-30, C1-C6',
                                 validator: (val) => val == null || val.trim().isEmpty ? 'Bus ID required' : null,
+                              )
+                            else
+                              Expanded(
+                                child: _buildTextField(
+                                  label: 'Bus ID / Number',
+                                  controller: busIdController,
+                                  icon: Icons.directions_bus_outlined,
+                                  hint: 'e.g., 1-30, C1-C6',
+                                  validator: (val) => val == null || val.trim().isEmpty ? 'Bus ID required' : null,
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Column(
+                            if (AppResponsiveUtil.isMobile(context)) const SizedBox(height: 16) else const SizedBox(width: 16),
+                            if (AppResponsiveUtil.isMobile(context))
+                              Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
@@ -974,8 +1130,47 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
                                     },
                                   ),
                                 ],
+                              )
+                            else
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Service Category',
+                                      style: GoogleFonts.poppins(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                        color: AppColors.textDark,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    DropdownButtonFormField<String>(
+                                      value: selectedType,
+                                      decoration: InputDecoration(
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                        filled: true,
+                                        fillColor: AppColors.backgroundLight.withOpacity(0.5),
+                                      ),
+                                      // Dropdown items loaded dynamically from Gender Config
+                                      items: _genderConfigs.isEmpty
+                                          ? [DropdownMenuItem(value: selectedType, child: Text(selectedType, style: GoogleFonts.poppins(fontSize: 13)))]
+                                          : _genderConfigs.keys.map((String val) {
+                                              return DropdownMenuItem<String>(
+                                                value: val,
+                                                child: Text(val, style: GoogleFonts.poppins(fontSize: 13)),
+                                              );
+                                            }).toList(),
+                                      onChanged: (val) {
+                                        setDialogState(() {
+                                          selectedType = val!;
+                                        });
+                                      },
+                                    ),
+                                  ],
+                                ),
                               ),
-                            ),
                           ],
                         ),
                         const SizedBox(height: 24),
@@ -990,7 +1185,9 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
                           ),
                         ),
                         const SizedBox(height: 10),
-                        Row(
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
                           children: [
                             _buildChoiceChip(
                               label: 'Daily',
@@ -1002,7 +1199,6 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
                                 });
                               },
                             ),
-                            const SizedBox(width: 10),
                             _buildChoiceChip(
                               label: 'Weekly Repeating',
                               icon: Icons.loop_rounded,
@@ -1013,7 +1209,6 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
                                 });
                               },
                             ),
-                            const SizedBox(width: 10),
                             _buildChoiceChip(
                               label: 'Specific Calendar Date',
                               icon: Icons.event_rounded,

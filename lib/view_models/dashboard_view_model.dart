@@ -23,6 +23,7 @@ class DashboardViewModel extends ChangeNotifier {
   String get selectedGender => _selectedGender;
   String get selectedTimeScale => _selectedTimeScale;
   List<SystemNotificationModel> get notifications => _notifications;
+  int get unreadNotificationsCount => _notifications.where((n) => !n.isRead).length;
 
   void setSelectedIndex(int index) {
     _selectedIndex = index;
@@ -255,37 +256,37 @@ class DashboardViewModel extends ChangeNotifier {
   void _updateSystemNotifications() {
     final List<SystemNotificationModel> logs = [];
 
-    // 1. Pending Support Tickets
+    // 1. Pending Support Tickets (both read and unread)
     final pendingTickets = _allTickets.where((t) => t.status.toLowerCase() == 'pending');
     for (var t in pendingTickets) {
-      if (!_dismissedNotificationIds.contains(t.id)) {
-        logs.add(SystemNotificationModel(
-          id: t.id,
-          title: 'New Support Request',
-          message: '${t.name}: ${t.issue}',
-          timestamp: t.timestamp,
-          type: NotificationType.support,
-          color: Colors.orange,
-        ));
-      }
+      final bool isRead = t.adminRead || _dismissedNotificationIds.contains(t.id);
+      logs.add(SystemNotificationModel(
+        id: t.id,
+        title: 'New Support Request',
+        message: '${t.name}: ${t.issue}',
+        timestamp: t.timestamp,
+        type: NotificationType.support,
+        isRead: isRead,
+        color: Colors.orange,
+      ));
     }
 
-    // 2. Active SOS / Emergency Alerts
+    // 2. Active SOS / Emergency Alerts (both read and unread)
     final activeSOS = _emergencyAlerts.where((a) => a['status'] == 'active');
     for (var a in activeSOS) {
       final String alertId = a['id'] ?? '';
-      if (!_dismissedNotificationIds.contains(alertId)) {
-        final timeVal = a['timestamp'];
-        final timestamp = timeVal != null ? DateTime.fromMillisecondsSinceEpoch(timeVal) : DateTime.now();
-        logs.add(SystemNotificationModel(
-          id: alertId,
-          title: 'Active SOS Alert!',
-          message: 'Driver: ${a['driverName'] ?? 'Unknown'} (Bus #${a['busNumber'] ?? 'N/A'}) - ${a['message'] ?? 'Emergency SOS'}',
-          timestamp: timestamp,
-          type: NotificationType.warning,
-          color: Colors.red,
-        ));
-      }
+      final timeVal = a['timestamp'];
+      final timestamp = timeVal != null ? DateTime.fromMillisecondsSinceEpoch(timeVal) : DateTime.now();
+      final bool isRead = (a['adminRead'] == true) || _dismissedNotificationIds.contains(alertId);
+      logs.add(SystemNotificationModel(
+        id: alertId,
+        title: 'Active SOS Alert!',
+        message: 'Driver: ${a['driverName'] ?? 'Unknown'} (Bus #${a['busNumber'] ?? 'N/A'}) - ${a['message'] ?? 'Emergency SOS'}',
+        timestamp: timestamp,
+        type: NotificationType.warning,
+        isRead: isRead,
+        color: Colors.red,
+      ));
     }
 
     // Sort by timestamp descending
@@ -299,11 +300,29 @@ class DashboardViewModel extends ChangeNotifier {
     _dismissedNotificationIds.add(id);
     _saveDismissedNotifications();
     _updateSystemNotifications();
+
+    // Persist to Firebase as read in background
+    _firebaseService.markTicketAsRead(id).catchError((e) {
+      debugPrint("Error updating ticket adminRead: $e");
+    });
+    _firebaseService.markEmergencyAlertAsRead(id).catchError((e) {
+      debugPrint("Error updating emergency alert adminRead: $e");
+    });
   }
 
   void clearAllNotifications() {
-    for (var notif in _notifications) {
+    final listToDismiss = List<SystemNotificationModel>.from(_notifications);
+    for (var notif in listToDismiss) {
       _dismissedNotificationIds.add(notif.id);
+      if (notif.type == NotificationType.support) {
+        _firebaseService.markTicketAsRead(notif.id).catchError((e) {
+          debugPrint("Error updating ticket adminRead: $e");
+        });
+      } else if (notif.type == NotificationType.warning) {
+        _firebaseService.markEmergencyAlertAsRead(notif.id).catchError((e) {
+          debugPrint("Error updating emergency alert adminRead: $e");
+        });
+      }
     }
     _saveDismissedNotifications();
     _updateSystemNotifications();

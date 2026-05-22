@@ -29,8 +29,8 @@ class SupportTicketModel {
     required this.userName,
     required this.userRole,
     this.adminReply,
-    this.userRead = true,
-    this.adminRead = true,
+    this.userRead = false,
+    this.adminRead = false,
   });
 
   factory SupportTicketModel.fromMap(String id, Map<String, dynamic> map) {
@@ -47,8 +47,8 @@ class SupportTicketModel {
       userName: map['userName'] ?? '',
       userRole: map['userRole'] ?? 'Unknown',
       adminReply: map['adminReply'],
-      userRead: map['userRead'] ?? true,
-      adminRead: map['adminRead'] ?? true,
+      userRead: map['userRead'] ?? false,
+      adminRead: map['adminRead'] ?? false,
     );
   }
 

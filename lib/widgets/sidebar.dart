@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 import 'package:unitransit_admin/core/constants/app_colors.dart';
+import 'package:unitransit_admin/core/constants/app_assets.dart';
 import 'package:unitransit_admin/view_models/dashboard_view_model.dart';
 import 'package:unitransit_admin/view_models/login_view_model.dart';
 import 'package:unitransit_admin/views/login_screen.dart';
@@ -32,24 +33,14 @@ class Sidebar extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [primaryColor, primaryColor.withOpacity(0.7)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(14),
-                    boxShadow: [
-                      BoxShadow(
-                        color: primaryColor.withOpacity(0.3),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.asset(
+                    AppAssets.unitransitLogo,
+                    width: 48,
+                    height: 48,
+                    fit: BoxFit.contain,
                   ),
-                  child: const Icon(Icons.directions_bus_rounded, color: Colors.white, size: 28),
                 ),
                 const SizedBox(width: 16),
                 Column(
@@ -235,7 +226,7 @@ class Sidebar extends StatelessWidget {
                       ),
                     ),
                   )
-                : (index == 8 && viewModel.notifications.length > 0)
+                : (index == 8 && viewModel.unreadNotificationsCount > 0)
                     ? Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
@@ -243,7 +234,7 @@ class Sidebar extends StatelessWidget {
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Text(
-                          viewModel.notifications.length.toString(),
+                          viewModel.unreadNotificationsCount.toString(),
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 10,

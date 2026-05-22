@@ -525,7 +525,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     border: Border(bottom: BorderSide(color: AppColors.borderLight, width: 1.5)),
                   ),
                   child: TabBar(
-                    isScrollable: false,
+                    isScrollable: AppResponsiveUtil.isMobile(context),
+                    tabAlignment: AppResponsiveUtil.isMobile(context) ? TabAlignment.start : null,
                     labelColor: AppColors.primaryNavy,
                     unselectedLabelColor: AppColors.textSecondary,
                     indicatorColor: AppColors.primaryNavy,

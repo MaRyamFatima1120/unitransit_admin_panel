@@ -345,25 +345,30 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Live Bus Tracking',
-                        style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.textDark,
-                              fontSize: isMobile ? 24 : null,
-                            ),
-                      ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        'Monitor university buses and active driver locations in real-time.',
-                        style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
-                      ),
-                    ],
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Live Bus Tracking',
+                          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.textDark,
+                                fontSize: isMobile ? 24 : null,
+                              ),
+                        ),
+                        const SizedBox(height: 4),
+                        const Text(
+                          'Monitor university buses and active driver locations in real-time.',
+                          style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                        ),
+                      ],
+                    ),
                   ),
-                  if (!isMobile) _buildStatsBadges(),
+                  if (!isMobile) ...[
+                    const SizedBox(width: 16),
+                    _buildStatsBadges(),
+                  ],
                 ],
               ),
             ),

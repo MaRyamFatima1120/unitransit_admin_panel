@@ -19,6 +19,7 @@ import 'package:unitransit_admin/views/admins_management_screen.dart';
 import 'package:unitransit_admin/views/schedules_screen.dart';
 import 'package:unitransit_admin/views/emergency_alerts_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:unitransit_admin/view_models/login_view_model.dart';
 import 'package:unitransit_admin/views/trip_history_screen.dart';
 import 'package:unitransit_admin/views/assign_routes_screen.dart';
@@ -286,9 +287,33 @@ class DashboardOverview extends StatelessWidget {
                           ],
                         ),
                         const SizedBox(height: 12),
-                        Text(
-                          '$greeting, ${isSuperAdmin ? "Super Admin" : "Admin"} 👋',
-                          style: TextStyle(color: Colors.white, fontSize: isMobile ? 24 : 32, fontWeight: FontWeight.w900, letterSpacing: -0.5),
+                        StreamBuilder<DocumentSnapshot>(
+                          stream: FirebaseFirestore.instance
+                              .collection('users')
+                              .doc(FirebaseAuth.instance.currentUser?.uid)
+                              .snapshots(),
+                          builder: (context, snapshot) {
+                            String displayName = isSuperAdmin ? "Super Admin" : "Admin";
+                            if (snapshot.hasData && snapshot.data!.exists) {
+                              final data = snapshot.data!.data() as Map<String, dynamic>?;
+                              if (data != null) {
+                                final dbName = data['name']?.toString().trim();
+                                if (dbName != null && dbName.isNotEmpty) {
+                                  displayName = dbName;
+                                }
+                              }
+                            }
+                            if (displayName == (isSuperAdmin ? "Super Admin" : "Admin")) {
+                              final authUser = FirebaseAuth.instance.currentUser;
+                              if (authUser != null && authUser.displayName != null && authUser.displayName!.trim().isNotEmpty) {
+                                displayName = authUser.displayName!.trim();
+                              }
+                            }
+                            return Text(
+                              '$greeting, $displayName 👋',
+                              style: TextStyle(color: Colors.white, fontSize: isMobile ? 24 : 32, fontWeight: FontWeight.w900, letterSpacing: -0.5),
+                            );
+                          },
                         ),
                         const SizedBox(height: 6),
                         Text(
@@ -474,28 +499,64 @@ class AdminTeamSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(color: AppColors.primaryNavy.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(10)),
-                    child: const Icon(Icons.admin_panel_settings_rounded, color: AppColors.primaryNavy, size: 20),
-                  ),
-                  const SizedBox(width: 12),
-                  const Text('Admin Management Team', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textDark)),
-                ],
-              ),
-              TextButton.icon(
-                onPressed: () => context.read<DashboardViewModel>().setSelectedIndex(3),
-                icon: const Icon(Icons.arrow_forward_rounded, size: 16),
-                label: const Text('Manage All'),
-                style: TextButton.styleFrom(foregroundColor: AppColors.primaryNavy),
-              ),
-            ],
-          ),
+          AppResponsiveUtil.isMobile(context)
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppColors.primaryNavy.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.admin_panel_settings_rounded, color: AppColors.primaryNavy, size: 20),
+                        ),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Text(
+                            'Admin Management Team',
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textDark),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton.icon(
+                      onPressed: () => context.read<DashboardViewModel>().setSelectedIndex(3),
+                      icon: const Icon(Icons.arrow_forward_rounded, size: 16),
+                      label: const Text('Manage All'),
+                      style: TextButton.styleFrom(foregroundColor: AppColors.primaryNavy, padding: EdgeInsets.zero),
+                    ),
+                  ],
+                )
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppColors.primaryNavy.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.admin_panel_settings_rounded, color: AppColors.primaryNavy, size: 20),
+                        ),
+                        const SizedBox(width: 12),
+                        const Text('Admin Management Team', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textDark)),
+                      ],
+                    ),
+                    TextButton.icon(
+                      onPressed: () => context.read<DashboardViewModel>().setSelectedIndex(3),
+                      icon: const Icon(Icons.arrow_forward_rounded, size: 16),
+                      label: const Text('Manage All'),
+                      style: TextButton.styleFrom(foregroundColor: AppColors.primaryNavy),
+                    ),
+                  ],
+                ),
           const SizedBox(height: 20),
           StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance.collection('users').where('role', isEqualTo: 'Admin').limit(5).snapshots(),
@@ -637,14 +698,19 @@ class DashboardStatsGrid extends StatelessWidget {
         ];
         return LayoutBuilder(
           builder: (context, constraints) {
-            final cols = constraints.maxWidth > 1200 ? 4 : (constraints.maxWidth > 700 ? 2 : 1);
+            final isMobile = constraints.maxWidth <= 700;
+            final cols = constraints.maxWidth > 1200 ? 4 : 2;
             return GridView.count(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               crossAxisCount: cols,
-              crossAxisSpacing: 24,
-              mainAxisSpacing: 24,
-              childAspectRatio: constraints.maxWidth > 1400 ? 1.5 : (cols == 4 ? 1.25 : (cols == 2 ? 1.6 : 2.0)),
+              crossAxisSpacing: isMobile ? 12 : 24,
+              mainAxisSpacing: isMobile ? 12 : 24,
+              childAspectRatio: isMobile
+                  ? (constraints.maxWidth < 360 ? 1.05 : 1.15)
+                  : (constraints.maxWidth > 1400
+                      ? 1.5
+                      : (cols == 4 ? 1.25 : 1.4)),
               children: cards,
             );
           },
@@ -709,6 +775,8 @@ class _StatCardState extends State<StatCard> with SingleTickerProviderStateMixin
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = AppResponsiveUtil.isMobile(context);
+
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
@@ -717,10 +785,10 @@ class _StatCardState extends State<StatCard> with SingleTickerProviderStateMixin
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeOutCubic,
-          padding: const EdgeInsets.all(24),
+          padding: EdgeInsets.all(isMobile ? 12 : 24),
           decoration: BoxDecoration(
             color: AppColors.cardWhite,
-            borderRadius: BorderRadius.circular(24),
+            borderRadius: BorderRadius.circular(20),
             border: Border.all(
               color: _isHovered ? widget.color.withValues(alpha: 0.4) : AppColors.borderLight.withValues(alpha: 0.8),
               width: _isHovered ? 2 : 1,
@@ -742,9 +810,12 @@ class _StatCardState extends State<StatCard> with SingleTickerProviderStateMixin
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(color: widget.color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(16)),
-                    child: Icon(widget.icon, color: widget.color, size: 24),
+                    padding: EdgeInsets.all(isMobile ? 6 : 12),
+                    decoration: BoxDecoration(
+                      color: widget.color.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(widget.icon, color: widget.color, size: isMobile ? 16 : 24),
                   ),
                   _buildTrendBadge(),
                 ],
@@ -754,30 +825,48 @@ class _StatCardState extends State<StatCard> with SingleTickerProviderStateMixin
                 crossAxisAlignment: CrossAxisAlignment.baseline,
                 textBaseline: TextBaseline.alphabetic,
                 children: [
-                  Text(widget.value, style: const TextStyle(color: AppColors.textDark, fontSize: 32, fontWeight: FontWeight.w800, letterSpacing: -1)),
+                  Text(
+                    widget.value,
+                    style: TextStyle(
+                      color: AppColors.textDark,
+                      fontSize: isMobile ? 22 : 32,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -1,
+                    ),
+                  ),
                   if (widget.isAlert && widget.value != '0')
                     Padding(
-                      padding: const EdgeInsets.only(left: 8),
+                      padding: const EdgeInsets.only(left: 4),
                       child: ScaleTransition(
                         scale: Tween(begin: 1.0, end: 1.2).animate(_pulseController),
-                        child: const Icon(Icons.emergency_rounded, color: Colors.red, size: 18),
+                        child: Icon(Icons.emergency_rounded, color: Colors.red, size: isMobile ? 14 : 18),
                       ),
                     ),
                 ],
               ),
-              Text(widget.title, style: const TextStyle(color: AppColors.textDark, fontSize: 15, fontWeight: FontWeight.bold)),
-              if (widget.subtitle != null)
-                Text(widget.subtitle!, style: TextStyle(color: AppColors.textSecondary.withValues(alpha: 0.8), fontSize: 12, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis),
-              const SizedBox(height: 16),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: LinearProgressIndicator(
-                  value: 0.7,
-                  minHeight: 4,
-                  backgroundColor: widget.color.withValues(alpha: 0.1),
-                  valueColor: AlwaysStoppedAnimation<Color>(widget.color.withValues(alpha: _isHovered ? 1.0 : 0.6)),
+              Text(
+                widget.title,
+                style: TextStyle(
+                  color: AppColors.textDark,
+                  fontSize: isMobile ? 12 : 15,
+                  fontWeight: FontWeight.bold,
                 ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
+              if (widget.subtitle != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  widget.subtitle!,
+                  style: TextStyle(
+                    color: AppColors.textSecondary.withValues(alpha: 0.8),
+                    fontSize: isMobile ? 9 : 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+              ],
             ],
           ),
         ),
@@ -786,11 +875,12 @@ class _StatCardState extends State<StatCard> with SingleTickerProviderStateMixin
   }
 
   Widget _buildTrendBadge() {
+    final isMobile = AppResponsiveUtil.isMobile(context);
     final Color badgeColor = widget.isAlert ? Colors.red : widget.color;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(color: badgeColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12), border: Border.all(color: badgeColor.withValues(alpha: 0.2))),
-      child: Text(widget.trend.toUpperCase(), style: TextStyle(color: badgeColor, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+      padding: EdgeInsets.symmetric(horizontal: isMobile ? 6 : 10, vertical: isMobile ? 3 : 6),
+      decoration: BoxDecoration(color: badgeColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8), border: Border.all(color: badgeColor.withValues(alpha: 0.2))),
+      child: Text(widget.trend.toUpperCase(), style: TextStyle(color: badgeColor, fontSize: isMobile ? 8 : 10, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
     );
   }
 }
@@ -823,30 +913,70 @@ class DashboardChart extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(color: AppColors.primaryNavy.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(10)),
-                          child: const Icon(Icons.analytics_rounded, color: AppColors.primaryNavy, size: 20),
+            child: AppResponsiveUtil.isMobile(context)
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryNavy.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(Icons.analytics_rounded, color: AppColors.primaryNavy, size: 20),
+                          ),
+                          const SizedBox(width: 12),
+                          const Expanded(
+                            child: Text(
+                              'Trip Analytics & Trends',
+                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.textDark),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Monitoring $totalTrips total trips in this $scale',
+                        style: TextStyle(
+                          color: AppColors.textSecondary.withValues(alpha: 0.8),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
                         ),
-                        const SizedBox(width: 12),
-                        const Text('Trip Analytics & Trends', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.textDark)),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Text('Monitoring $totalTrips total trips in this $scale', style: TextStyle(color: AppColors.textSecondary.withValues(alpha: 0.8), fontSize: 13, fontWeight: FontWeight.w500)),
-                  ],
-                ),
-                _buildTimeScaleToggle(context, viewModel),
-              ],
-            ),
+                      ),
+                      const SizedBox(height: 12),
+                      _buildTimeScaleToggle(context, viewModel),
+                    ],
+                  )
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primaryNavy.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: const Icon(Icons.analytics_rounded, color: AppColors.primaryNavy, size: 20),
+                              ),
+                              const SizedBox(width: 12),
+                              const Text('Trip Analytics & Trends', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.textDark)),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text('Monitoring $totalTrips total trips in this $scale', style: TextStyle(color: AppColors.textSecondary.withValues(alpha: 0.8), fontSize: 13, fontWeight: FontWeight.w500)),
+                        ],
+                      ),
+                      _buildTimeScaleToggle(context, viewModel),
+                    ],
+                  ),
           ),
           Expanded(
             child: Padding(
@@ -880,13 +1010,14 @@ class DashboardChart extends StatelessWidget {
               ),
             ),
           ),
-          _buildInsightFooter(stats, scale),
+          _buildInsightFooter(context, stats, scale),
         ],
       ),
     );
   }
 
   Widget _buildTimeScaleToggle(BuildContext context, DashboardViewModel vm) {
+    final isMobile = AppResponsiveUtil.isMobile(context);
     return Container(
       decoration: BoxDecoration(color: AppColors.backgroundLight, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.borderLight)),
       padding: const EdgeInsets.all(4),
@@ -898,7 +1029,7 @@ class DashboardChart extends StatelessWidget {
             onTap: () => vm.setTimeScale(s),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              padding: EdgeInsets.symmetric(horizontal: isMobile ? 10 : 14, vertical: 8),
               decoration: BoxDecoration(color: isSelected ? AppColors.primaryNavy : Colors.transparent, borderRadius: BorderRadius.circular(8)),
               child: Text(s, style: TextStyle(color: isSelected ? Colors.white : AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.bold)),
             ),
@@ -917,21 +1048,40 @@ class DashboardChart extends StatelessWidget {
     return Padding(padding: const EdgeInsets.only(top: 10), child: Text(text, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)));
   }
 
-  Widget _buildInsightFooter(List<double> stats, String scale) {
+  Widget _buildInsightFooter(BuildContext context, List<double> stats, String scale) {
     if (stats.isEmpty) return const SizedBox();
     double avg = stats.fold(0.0, (a, b) => a + b) / stats.length;
     double max = stats.reduce((a, b) => a > b ? a : b);
+    final isMobile = AppResponsiveUtil.isMobile(context);
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-      decoration: BoxDecoration(color: AppColors.backgroundLight.withValues(alpha: 0.5), borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(24), bottomRight: Radius.circular(24))),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          _InsightItem(label: 'Avg Trips', value: avg.toStringAsFixed(1), icon: Icons.speed_rounded, color: Colors.blue),
-          _InsightItem(label: 'Peak Volume', value: max.toInt().toString(), icon: Icons.trending_up_rounded, color: Colors.orange),
-          _InsightItem(label: 'Data Sync', value: 'Real-time', icon: Icons.sync_rounded, color: Colors.green),
-        ],
+      padding: EdgeInsets.symmetric(horizontal: 24, vertical: isMobile ? 12 : 16),
+      decoration: BoxDecoration(
+        color: AppColors.backgroundLight.withValues(alpha: 0.5),
+        borderRadius: const BorderRadius.only(
+          bottomLeft: Radius.circular(24),
+          bottomRight: Radius.circular(24),
+        ),
       ),
+      child: isMobile
+          ? Wrap(
+              spacing: 16,
+              runSpacing: 12,
+              alignment: WrapAlignment.spaceAround,
+              children: [
+                _InsightItem(label: 'Avg Trips', value: avg.toStringAsFixed(1), icon: Icons.speed_rounded, color: Colors.blue),
+                _InsightItem(label: 'Peak Volume', value: max.toInt().toString(), icon: Icons.trending_up_rounded, color: Colors.orange),
+                _InsightItem(label: 'Data Sync', value: 'Real-time', icon: Icons.sync_rounded, color: Colors.green),
+              ],
+            )
+          : Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _InsightItem(label: 'Avg Trips', value: avg.toStringAsFixed(1), icon: Icons.speed_rounded, color: Colors.blue),
+                _InsightItem(label: 'Peak Volume', value: max.toInt().toString(), icon: Icons.trending_up_rounded, color: Colors.orange),
+                _InsightItem(label: 'Data Sync', value: 'Real-time', icon: Icons.sync_rounded, color: Colors.green),
+              ],
+            ),
     );
   }
 }

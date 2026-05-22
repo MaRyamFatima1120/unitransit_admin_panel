@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:unitransit_admin/core/constants/app_colors.dart';
+import 'package:unitransit_admin/core/constants/app_assets.dart';
 import 'package:unitransit_admin/views/dashboard_screen.dart';
 import 'package:unitransit_admin/views/forgot_password_screen.dart';
 import 'package:responsive_builder/responsive_builder.dart';
@@ -107,7 +108,10 @@ class LoginScreen extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.directions_bus_rounded, size: 80, color: theme.colorScheme.secondary),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(20),
+                    child: Image.asset(AppAssets.unitransitLogo, size: 100, fit: BoxFit.contain),
+                  ),
                   const SizedBox(height: 24),
                   const Text('Uni-Transit', style: TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
                 ],
@@ -142,9 +146,12 @@ class LoginScreen extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(20),
+                        padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(color: Colors.white.withOpacity(0.1), borderRadius: BorderRadius.circular(24)),
-                        child: Icon(Icons.directions_bus_rounded, size: 100, color: theme.colorScheme.secondary),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(16),
+                          child: Image.asset(AppAssets.unitransitLogo, size: 100, fit: BoxFit.contain),
+                        ),
                       ),
                       const SizedBox(height: 32),
                       GestureDetector(
@@ -176,7 +183,10 @@ class LoginScreen extends StatelessWidget {
         child: Column(
           children: [
             const SizedBox(height: 60),
-            Icon(Icons.directions_bus_rounded, size: 64, color: theme.primaryColor),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Image.asset(AppAssets.unitransitLogo, size: 80, fit: BoxFit.contain),
+            ),
             const SizedBox(height: 24),
             GestureDetector(
               onLongPress: () => _showSecretLogin(context, viewModel),

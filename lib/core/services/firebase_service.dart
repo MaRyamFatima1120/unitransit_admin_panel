@@ -165,6 +165,38 @@ class FirebaseService {
   }
 
   Future<void> deleteBusSchedule(String id, String routeName) async {
+    // 0. Clean up driver assignment
+    try {
+      final scheduleDoc = await _db.collection('schedules').doc(id).get();
+      if (scheduleDoc.exists) {
+        final driverId = scheduleDoc.data()?['assignedDriverId'];
+        if (driverId != null && driverId.toString().isNotEmpty) {
+          final driverDoc = await _db.collection('drivers').doc(driverId).get();
+          if (driverDoc.exists) {
+            final assignedRoutes = List<String>.from(driverDoc.data()?['assignedRoutes'] ?? []);
+            assignedRoutes.remove(id);
+            
+            // Recompute bus numbers for this driver
+            final busNumbers = <String>{};
+            for (final sid in assignedRoutes) {
+              final sDoc = await _db.collection('schedules').doc(sid).get();
+              if (sDoc.exists) {
+                final bn = sDoc.data()?['busNumber'] ?? '';
+                if (bn.toString().isNotEmpty && bn != 'TBA') busNumbers.add(bn);
+              }
+            }
+            
+            await _db.collection('drivers').doc(driverId).update({
+              'assignedRoutes': assignedRoutes,
+              'assignedBus': busNumbers.join(', '),
+            });
+          }
+        }
+      }
+    } catch (e) {
+      print("Error cleaning up driver assignment on schedule delete: $e");
+    }
+
     // 1. Delete from Firestore
     await _db.collection('schedules').doc(id).delete();
     
@@ -431,6 +463,26 @@ class FirebaseService {
       } catch (e) {
         print('Error generating reply notification: $e');
       }
+    }
+  }
+
+  Future<void> markTicketAsRead(String ticketId) async {
+    try {
+      await _db.collection('support_tickets').doc(ticketId).update({
+        'adminRead': true,
+      });
+    } catch (e) {
+      print('Error marking ticket as read: $e');
+    }
+  }
+
+  Future<void> markEmergencyAlertAsRead(String alertId) async {
+    try {
+      await _rtdb.ref('emergency_alerts').child(alertId).update({
+        'adminRead': true,
+      });
+    } catch (e) {
+      print('Error marking emergency alert as read: $e');
     }
   }
 

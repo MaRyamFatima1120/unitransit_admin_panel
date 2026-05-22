@@ -6,6 +6,7 @@ import 'package:unitransit_admin/view_models/dashboard_view_model.dart';
 import 'package:unitransit_admin/view_models/login_view_model.dart';
 import 'package:unitransit_admin/views/faq_management_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class Header extends StatefulWidget {
   const Header({super.key});
@@ -19,7 +20,6 @@ class _HeaderState extends State<Header> {
   Widget build(BuildContext context) {
     final viewModel = context.watch<DashboardViewModel>();
     final isSuperAdmin = context.read<LoginViewModel>().isSuperAdmin;
-    final userName = isSuperAdmin ? 'Super Admin' : 'Admin';
 
     return Container(
       height: 80,
@@ -41,60 +41,87 @@ class _HeaderState extends State<Header> {
           _buildHeaderAction(
             context, 
             Icons.notifications_none_rounded, 
-            badgeCount: viewModel.notifications.length,
+            badgeCount: viewModel.unreadNotificationsCount,
             onTap: () => viewModel.setSelectedIndex(8), // Notifications Index
           ),
           
           const SizedBox(width: 32),
           
           // User Profile Info
-          Row(
-            children: [
-              if (!AppResponsiveUtil.isMobile(context) && !AppResponsiveUtil.isTablet(context))
-                Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Row(
+          StreamBuilder<DocumentSnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('users')
+                .doc(FirebaseAuth.instance.currentUser?.uid)
+                .snapshots(),
+            builder: (context, snapshot) {
+              String name = isSuperAdmin ? 'Super Admin' : 'Admin';
+              if (snapshot.hasData && snapshot.data!.exists) {
+                final data = snapshot.data!.data() as Map<String, dynamic>?;
+                if (data != null) {
+                  final dbName = data['name']?.toString().trim();
+                  if (dbName != null && dbName.isNotEmpty) {
+                    name = dbName;
+                  }
+                }
+              }
+              if (name == (isSuperAdmin ? 'Super Admin' : 'Admin')) {
+                final authUser = FirebaseAuth.instance.currentUser;
+                if (authUser != null && authUser.displayName != null && authUser.displayName!.trim().isNotEmpty) {
+                  name = authUser.displayName!.trim();
+                }
+              }
+              
+              final displayInitial = name.isNotEmpty ? name[0].toUpperCase() : 'A';
+
+              return Row(
+                children: [
+                  if (!AppResponsiveUtil.isMobile(context) && !AppResponsiveUtil.isTablet(context))
+                    Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        if (isSuperAdmin)
-                          Container(
-                            margin: const EdgeInsets.only(right: 8),
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                            decoration: BoxDecoration(
-                              gradient: const LinearGradient(colors: [Colors.amber, Colors.orange]),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: const Text(
-                              'MASTER',
-                              style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w900),
-                            ),
-                          ),
-                        Text(userName, style: const TextStyle(color: AppColors.textDark, fontWeight: FontWeight.bold, fontSize: 14)),
+                        Row(
+                          children: [
+                            if (isSuperAdmin)
+                              Container(
+                                margin: const EdgeInsets.only(right: 8),
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(colors: [Colors.amber, Colors.orange]),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Text(
+                                  'MASTER',
+                                  style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w900),
+                                ),
+                              ),
+                            Text(name, style: const TextStyle(color: AppColors.textDark, fontWeight: FontWeight.bold, fontSize: 14)),
+                          ],
+                        ),
+                        Text(
+                          _getPageSubtitle(viewModel.selectedIndex),
+                          style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+                        ),
                       ],
                     ),
-                    Text(
-                      _getPageSubtitle(viewModel.selectedIndex),
-                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+                  const SizedBox(width: 16),
+                  Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: AppColors.primaryNavy.withValues(alpha: 0.2), width: 2),
                     ),
-                  ],
-                ),
-              const SizedBox(width: 16),
-              Container(
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: AppColors.primaryNavy.withOpacity(0.2), width: 2),
-                ),
-                child: CircleAvatar(
-                  radius: 20,
-                  backgroundColor: AppColors.primaryNavy.withOpacity(0.1),
-                  child: Text(
-                    userName[0], 
-                    style: const TextStyle(color: AppColors.primaryNavy, fontWeight: FontWeight.bold)
+                    child: CircleAvatar(
+                      radius: 20,
+                      backgroundColor: AppColors.primaryNavy.withValues(alpha: 0.1),
+                      child: Text(
+                        displayInitial, 
+                        style: const TextStyle(color: AppColors.primaryNavy, fontWeight: FontWeight.bold)
+                      ),
+                    ),
                   ),
-                ),
-              ),
-            ],
+                ],
+              );
+            },
           ),
         ],
       ),

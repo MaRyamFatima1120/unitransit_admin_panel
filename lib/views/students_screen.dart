@@ -161,24 +161,47 @@ class _StudentsScreenState extends State<StudentsScreen> {
             ),
           ),
           const SizedBox(height: 24),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const FadeInSlide(
-                direction: FadeInDirection.leftToRight,
-                delay: Duration(milliseconds: 400),
-                child: Text(
-                  'All Registered Students',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primaryNavy),
+          AppResponsiveUtil.isMobile(context)
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const FadeInSlide(
+                      direction: FadeInDirection.leftToRight,
+                      delay: Duration(milliseconds: 400),
+                      child: Text(
+                        'All Registered Students',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primaryNavy),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    FadeInSlide(
+                      direction: FadeInDirection.rightToLeft,
+                      delay: const Duration(milliseconds: 400),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: _buildAddStudentButton(context, viewModel),
+                      ),
+                    ),
+                  ],
+                )
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const FadeInSlide(
+                      direction: FadeInDirection.leftToRight,
+                      delay: Duration(milliseconds: 400),
+                      child: Text(
+                        'All Registered Students',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primaryNavy),
+                      ),
+                    ),
+                    FadeInSlide(
+                      direction: FadeInDirection.rightToLeft,
+                      delay: const Duration(milliseconds: 400),
+                      child: _buildAddStudentButton(context, viewModel),
+                    ),
+                  ],
                 ),
-              ),
-              FadeInSlide(
-                direction: FadeInDirection.rightToLeft,
-                delay: const Duration(milliseconds: 400),
-                child: _buildAddStudentButton(context, viewModel)
-              ),
-            ],
-          ),
         ],
       ),
     );

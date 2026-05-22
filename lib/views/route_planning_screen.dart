@@ -125,6 +125,8 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> with SingleTi
         ),
         child: TabBar(
           controller: _tabController,
+          isScrollable: AppResponsiveUtil.isMobile(context),
+          tabAlignment: AppResponsiveUtil.isMobile(context) ? TabAlignment.start : null,
           labelColor: Colors.white,
           unselectedLabelColor: AppColors.textSecondary,
           indicator: BoxDecoration(
@@ -711,17 +713,18 @@ class _MapPreviewSectionState extends State<MapPreviewSection> {
     });
   }
 
-  Widget _buildMapButton({required IconData icon, required VoidCallback onPressed}) {
+  Widget _buildMapButton({required IconData icon, required VoidCallback onPressed, bool isMobile = false}) {
     return Container(
-      width: 40,
-      height: 40,
+      width: isMobile ? 32 : 40,
+      height: isMobile ? 32 : 40,
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.95),
         shape: BoxShape.circle,
         boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
       ),
       child: IconButton(
-        icon: Icon(icon, color: AppColors.primaryNavy, size: 20),
+        padding: EdgeInsets.zero,
+        icon: Icon(icon, color: AppColors.primaryNavy, size: isMobile ? 16 : 20),
         onPressed: onPressed,
       ),
     );
@@ -730,6 +733,7 @@ class _MapPreviewSectionState extends State<MapPreviewSection> {
   @override
   Widget build(BuildContext context) {
     final firebaseService = context.read<FirebaseService>();
+    final isMobile = AppResponsiveUtil.isMobile(context);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 24),
@@ -738,59 +742,127 @@ class _MapPreviewSectionState extends State<MapPreviewSection> {
         children: [
           // Route selector
           Container(
-            padding: const EdgeInsets.all(20),
+            padding: EdgeInsets.all(isMobile ? 12 : 20),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: AppColors.borderLight),
             ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: AppColors.primaryNavy.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.map_rounded, color: AppColors.primaryNavy, size: 20),
-                ),
-                const SizedBox(width: 16),
-                const Text('Route Map Preview', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                const Spacer(),
-                // Route dropdown
-                StreamBuilder<List<BusSchedule>>(
-                  stream: firebaseService.getBusSchedules(),
-                  builder: (context, snapshot) {
-                    final routes = snapshot.data ?? [];
-                    if (routes.isEmpty) return const SizedBox.shrink();
-
-                    // Auto-select first route
-                    if (_selectedRoute == null && routes.isNotEmpty) {
-                      SchedulerBinding.instance.addPostFrameCallback((_) {
-                        if (mounted) setState(() => _selectedRoute = routes.first.route);
-                      });
-                    }
-
-                    return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      decoration: BoxDecoration(
-                        color: AppColors.backgroundLight,
-                        borderRadius: BorderRadius.circular(10),
+            child: isMobile
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryNavy.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(Icons.map_rounded, color: AppColors.primaryNavy, size: 18),
+                          ),
+                          const SizedBox(width: 10),
+                          const Expanded(
+                            child: Text(
+                              'Route Map Preview', 
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                       ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: _selectedRoute,
-                          hint: const Text('Select route', style: TextStyle(fontSize: 13)),
-                          items: routes.map((r) => DropdownMenuItem(value: r.route, child: Text(r.route, style: const TextStyle(fontSize: 13)))).toList(),
-                          onChanged: (v) => setState(() => _selectedRoute = v),
-                          icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
+                      const SizedBox(height: 12),
+                      StreamBuilder<List<BusSchedule>>(
+                        stream: firebaseService.getBusSchedules(),
+                        builder: (context, snapshot) {
+                          final routes = snapshot.data ?? [];
+                          if (routes.isEmpty) return const SizedBox.shrink();
+
+                          final routeNames = routes.map((r) => r.route).toList();
+                          if (_selectedRoute != null && !routeNames.contains(_selectedRoute)) {
+                            SchedulerBinding.instance.addPostFrameCallback((_) {
+                              if (mounted) setState(() => _selectedRoute = routes.isNotEmpty ? routes.first.route : null);
+                            });
+                          } else if (_selectedRoute == null && routes.isNotEmpty) {
+                            SchedulerBinding.instance.addPostFrameCallback((_) {
+                              if (mounted) setState(() => _selectedRoute = routes.first.route);
+                            });
+                          }
+
+                          return Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            decoration: BoxDecoration(
+                              color: AppColors.backgroundLight,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<String>(
+                                value: _selectedRoute,
+                                isExpanded: true,
+                                hint: const Text('Select route', style: TextStyle(fontSize: 13)),
+                                items: routes.map((r) => DropdownMenuItem(value: r.route, child: Text(r.route, style: const TextStyle(fontSize: 13)))).toList(),
+                                onChanged: (v) => setState(() => _selectedRoute = v),
+                                icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  )
+                : Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryNavy.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(10),
                         ),
+                        child: const Icon(Icons.map_rounded, color: AppColors.primaryNavy, size: 20),
                       ),
-                    );
-                  },
-                ),
-              ],
-            ),
+                      const SizedBox(width: 16),
+                      const Text('Route Map Preview', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                      const Spacer(),
+                      // Route dropdown
+                      StreamBuilder<List<BusSchedule>>(
+                        stream: firebaseService.getBusSchedules(),
+                        builder: (context, snapshot) {
+                          final routes = snapshot.data ?? [];
+                          if (routes.isEmpty) return const SizedBox.shrink();
+
+                          final routeNames = routes.map((r) => r.route).toList();
+                          if (_selectedRoute != null && !routeNames.contains(_selectedRoute)) {
+                            SchedulerBinding.instance.addPostFrameCallback((_) {
+                              if (mounted) setState(() => _selectedRoute = routes.isNotEmpty ? routes.first.route : null);
+                            });
+                          } else if (_selectedRoute == null && routes.isNotEmpty) {
+                            SchedulerBinding.instance.addPostFrameCallback((_) {
+                              if (mounted) setState(() => _selectedRoute = routes.first.route);
+                            });
+                          }
+
+                          return Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            decoration: BoxDecoration(
+                              color: AppColors.backgroundLight,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<String>(
+                                value: _selectedRoute,
+                                hint: const Text('Select route', style: TextStyle(fontSize: 13)),
+                                items: routes.map((r) => DropdownMenuItem(value: r.route, child: Text(r.route, style: const TextStyle(fontSize: 13)))).toList(),
+                                onChanged: (v) => setState(() => _selectedRoute = v),
+                                icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
           ),
           const SizedBox(height: 16),
 
@@ -980,12 +1052,13 @@ class _MapPreviewSectionState extends State<MapPreviewSection> {
                                     ),
                                     // Control Buttons
                                     Positioned(
-                                      bottom: 16,
-                                      left: 16,
+                                      bottom: isMobile ? 10 : 16,
+                                      left: isMobile ? 10 : 16,
                                       child: Column(
                                         children: [
                                           _buildMapButton(
                                             icon: Icons.add,
+                                            isMobile: isMobile,
                                             onPressed: () {
                                               _mapController.move(
                                                 _mapController.camera.center,
@@ -996,6 +1069,7 @@ class _MapPreviewSectionState extends State<MapPreviewSection> {
                                           const SizedBox(height: 8),
                                           _buildMapButton(
                                             icon: Icons.remove,
+                                            isMobile: isMobile,
                                             onPressed: () {
                                               _mapController.move(
                                                 _mapController.camera.center,
@@ -1006,6 +1080,7 @@ class _MapPreviewSectionState extends State<MapPreviewSection> {
                                           const SizedBox(height: 8),
                                           _buildMapButton(
                                             icon: Icons.center_focus_strong,
+                                            isMobile: isMobile,
                                             onPressed: () => _fitAllPoints(hubs, routeStops, polylineLatLngs),
                                           ),
                                         ],
@@ -1013,26 +1088,26 @@ class _MapPreviewSectionState extends State<MapPreviewSection> {
                                     ),
                                     // Legend
                                     Positioned(
-                                      bottom: 16,
-                                      right: 16,
+                                      bottom: isMobile ? 10 : 16,
+                                      right: isMobile ? 10 : 16,
                                       child: Container(
-                                        padding: const EdgeInsets.all(12),
+                                        padding: EdgeInsets.all(isMobile ? 8 : 12),
                                         decoration: BoxDecoration(
                                           color: Colors.white.withValues(alpha: 0.95),
-                                          borderRadius: BorderRadius.circular(12),
+                                          borderRadius: BorderRadius.circular(isMobile ? 8 : 12),
                                           boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 8)],
                                         ),
                                         child: Column(
                                           mainAxisSize: MainAxisSize.min,
                                           crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
-                                            const Text('Legend', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.textDark)),
-                                            const SizedBox(height: 8),
-                                            _buildLegendItem(AppColors.accentAmber, Icons.circle, 'Hub / Campus'),
-                                            const SizedBox(height: 4),
-                                            _buildLegendItem(Colors.orange, Icons.radio_button_checked, 'Bus Stop'),
-                                            const SizedBox(height: 4),
-                                            _buildLegendItem(const Color(0xFF1A237E), Icons.remove, 'Route Path'),
+                                            Text('Legend', style: TextStyle(fontWeight: FontWeight.bold, fontSize: isMobile ? 10 : 12, color: AppColors.textDark)),
+                                            SizedBox(height: isMobile ? 4 : 8),
+                                            _buildLegendItem(AppColors.accentAmber, Icons.circle, 'Hub / Campus', isMobile),
+                                            SizedBox(height: isMobile ? 2 : 4),
+                                            _buildLegendItem(Colors.orange, Icons.radio_button_checked, 'Bus Stop', isMobile),
+                                            SizedBox(height: isMobile ? 2 : 4),
+                                            _buildLegendItem(const Color(0xFF1A237E), Icons.remove, 'Route Path', isMobile),
                                           ],
                                         ),
                                       ),
@@ -1066,24 +1141,25 @@ class _MapPreviewSectionState extends State<MapPreviewSection> {
                                       top: 16,
                                       right: 16,
                                       child: Container(
-                                        padding: const EdgeInsets.all(12),
+                                        padding: EdgeInsets.all(isMobile ? 8 : 12),
                                         decoration: BoxDecoration(
                                           color: Colors.white.withValues(alpha: 0.95),
-                                          borderRadius: BorderRadius.circular(12),
+                                          borderRadius: BorderRadius.circular(isMobile ? 8 : 12),
                                           boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 8)],
                                         ),
                                         child: Column(
                                           mainAxisSize: MainAxisSize.min,
                                           crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
-                                            _buildStatRow(Icons.location_city_rounded, '${hubs.length} Hubs', Colors.blue),
-                                            const SizedBox(height: 4),
-                                            _buildStatRow(Icons.radio_button_checked, '${routeStops.length} Stops', Colors.orange),
-                                            const SizedBox(height: 4),
+                                            _buildStatRow(Icons.location_city_rounded, '${hubs.length} Hubs', Colors.blue, isMobile),
+                                            SizedBox(height: isMobile ? 2 : 4),
+                                            _buildStatRow(Icons.radio_button_checked, '${routeStops.length} Stops', Colors.orange, isMobile),
+                                            SizedBox(height: isMobile ? 2 : 4),
                                             _buildStatRow(
                                               polylineLatLngs.isEmpty ? Icons.warning_amber_rounded : Icons.polyline_rounded,
-                                              polylineLatLngs.isEmpty ? 'No path uploaded' : '${polylineLatLngs.length} coords',
+                                              polylineLatLngs.isEmpty ? (isMobile ? 'No path' : 'No path uploaded') : '${polylineLatLngs.length} coords',
                                               polylineLatLngs.isEmpty ? Colors.orange : Colors.green,
+                                              isMobile,
                                             ),
                                           ],
                                         ),
@@ -1104,24 +1180,24 @@ class _MapPreviewSectionState extends State<MapPreviewSection> {
     );
   }
 
-  Widget _buildLegendItem(Color color, IconData icon, String label) {
+  Widget _buildLegendItem(Color color, IconData icon, String label, bool isMobile) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, color: color, size: 14),
+        Icon(icon, color: color, size: isMobile ? 12 : 14),
         const SizedBox(width: 6),
-        Text(label, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+        Text(label, style: TextStyle(fontSize: isMobile ? 9 : 11, color: AppColors.textSecondary)),
       ],
     );
   }
 
-  Widget _buildStatRow(IconData icon, String label, Color color) {
+  Widget _buildStatRow(IconData icon, String label, Color color, bool isMobile) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, color: color, size: 14),
+        Icon(icon, color: color, size: isMobile ? 12 : 14),
         const SizedBox(width: 6),
-        Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+        Text(label, style: TextStyle(fontSize: isMobile ? 9 : 11, fontWeight: FontWeight.w600)),
       ],
     );
   }

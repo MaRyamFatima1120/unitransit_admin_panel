@@ -134,6 +134,8 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
         child: TabBar(
           controller: _tabController,
           dividerColor: Colors.transparent,
+          isScrollable: AppResponsiveUtil.isMobile(context),
+          tabAlignment: AppResponsiveUtil.isMobile(context) ? TabAlignment.start : null,
           tabs: const [
             Tab(text: 'App Content', icon: Icon(Icons.info_outline_rounded, size: 20)),
             Tab(text: 'Design System', icon: Icon(Icons.palette_outlined, size: 20)),
@@ -445,17 +447,6 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
     );
   }
 
-  Widget _buildSmallField(String label, String initialValue, TextTheme textTheme, Function(String) onChanged, {int maxLines = 1}) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label.toUpperCase(), style: textTheme.labelSmall),
-        const SizedBox(height: 6),
-        TextFormField(initialValue: initialValue, onChanged: onChanged, maxLines: maxLines, style: textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600, color: AppColors.textDark),
-          decoration: InputDecoration(isDense: true, contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none), filled: true, fillColor: Colors.white)),
-      ],
-    );
-  }
 
   Widget _buildActionButtons(BuildContext context, AppSettingsViewModel viewModel) {
     return FadeInSlide(

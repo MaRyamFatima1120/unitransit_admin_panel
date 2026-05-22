@@ -829,7 +829,31 @@ class _AssignRoutesScreenState extends State<AssignRoutesScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('SCHEDULE DETAILS', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.white70, letterSpacing: 1.5)),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('SCHEDULE DETAILS', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.white70, letterSpacing: 1.5)),
+                    Row(
+                      children: [
+                        IconButton(
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          onPressed: () => _confirmClearAssignment(context),
+                          icon: const Icon(Icons.cleaning_services_rounded, color: Colors.white70, size: 18),
+                          tooltip: 'Clear Assignment Info',
+                        ),
+                        const SizedBox(width: 12),
+                        IconButton(
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          onPressed: () => _confirmDeleteSchedule(context),
+                          icon: const Icon(Icons.delete_forever_rounded, color: Colors.redAccent, size: 18),
+                          tooltip: 'Delete Schedule Entirely',
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 12),
                 Text(schedule.route, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
                 const SizedBox(height: 8),
@@ -1618,6 +1642,160 @@ class _AssignRoutesScreenState extends State<AssignRoutesScreen> {
           style: const TextStyle(fontSize: 13),
         ),
       ],
+    );
+  }
+
+  void _confirmDeleteSchedule(BuildContext context) {
+    if (_selectedSchedule == null) return;
+    final schedule = _selectedSchedule!;
+    final firebaseService = context.read<FirebaseService>();
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Delete Schedule'),
+          content: Text('Are you sure you want to delete this schedule for route "${schedule.route}"? This will also unassign any crew and cannot be undone.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(context);
+                setState(() => _isSaving = true);
+                try {
+                  await firebaseService.deleteBusSchedule(schedule.id, schedule.route);
+                  setState(() {
+                    _selectedSchedule = null;
+                  });
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content: Text('Schedule deleted successfully!'),
+                      backgroundColor: Colors.green,
+                    ));
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text('Failed to delete: $e'),
+                      backgroundColor: Colors.red,
+                    ));
+                  }
+                } finally {
+                  setState(() => _isSaving = false);
+                }
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _confirmClearAssignment(BuildContext context) {
+    if (_selectedSchedule == null) return;
+    final schedule = _selectedSchedule!;
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Clear Crew & Details'),
+          content: const Text('Are you sure you want to clear the driver, conductor, bus number, and reset the departure time for this schedule?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(context);
+                setState(() => _isSaving = true);
+                try {
+                  final db = FirebaseFirestore.instance;
+                  final firebaseService = context.read<FirebaseService>();
+                  
+                  // 1. Update schedule document - clear all assigned info
+                  await db.collection('schedules').doc(schedule.id).update({
+                    'assignedDriverId': '',
+                    'assignedDriverName': '',
+                    'assignedConductorName': '',
+                    'busNumber': 'TBA',
+                    'departureTime': 'TBA',
+                  });
+
+                  // 2. Remove this schedule from driver's assigned list
+                  if (schedule.assignedDriverId != null && schedule.assignedDriverId!.isNotEmpty) {
+                    final oldDriverDoc = await db.collection('drivers').doc(schedule.assignedDriverId).get();
+                    if (oldDriverDoc.exists) {
+                      final oldRoutes = List<String>.from(oldDriverDoc.data()?['assignedRoutes'] ?? []);
+                      oldRoutes.remove(schedule.id);
+                      
+                      // Recalculate old driver's assignedBus field
+                      final busNumbers = <String>{};
+                      for (final sid in oldRoutes) {
+                        final sDoc = await db.collection('schedules').doc(sid).get();
+                        if (sDoc.exists) {
+                          final bn = sDoc.data()?['busNumber'] ?? '';
+                          if (bn.toString().isNotEmpty && bn != 'TBA') busNumbers.add(bn);
+                        }
+                      }
+                      await db.collection('drivers').doc(schedule.assignedDriverId!).update({
+                        'assignedRoutes': oldRoutes,
+                        'assignedBus': busNumbers.join(', '),
+                      });
+                      
+                      // Notify driver
+                      await firebaseService.sendUserNotification(
+                        userId: schedule.assignedDriverId!,
+                        title: 'Route Assignment Removed',
+                        message: 'Your assignment for route \'${schedule.route}\' has been removed.',
+                        type: 'alert',
+                      );
+                    }
+                  }
+
+                  // Update local state
+                  setState(() {
+                    _selectedDriverId = null;
+                    _selectedDriverName = null;
+                    _conductorController.clear();
+                    _busController.text = 'TBA';
+                    _timeController.text = 'TBA';
+                    _selectedSchedule = schedule.copyWith(
+                      assignedDriverId: '',
+                      assignedDriverName: '',
+                      assignedConductorName: '',
+                      busNumber: 'TBA',
+                      departureTime: 'TBA',
+                    );
+                  });
+
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content: Text('Crew details and assignments cleared!'),
+                      backgroundColor: Colors.green,
+                    ));
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text('Failed to clear: $e'),
+                      backgroundColor: Colors.red,
+                    ));
+                  }
+                } finally {
+                  setState(() => _isSaving = false);
+                }
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.amber.shade800, foregroundColor: Colors.white),
+              child: const Text('Clear'),
+            ),
+          ],
+        );
+      },
     );
   }
 }
