@@ -145,7 +145,6 @@ class _StudentsScreenState extends State<StudentsScreen> {
   }
 
   Widget _buildToolbar(BuildContext context) {
-    final viewModel = context.watch<StudentsViewModel>();
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -155,8 +154,12 @@ class _StudentsScreenState extends State<StudentsScreen> {
             delay: const Duration(milliseconds: 300),
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
-              child: Row(
-                children: _tabs.map((tab) => _buildTab(tab, viewModel)).toList(),
+              child: Consumer<StudentsViewModel>(
+                builder: (context, viewModel, _) {
+                  return Row(
+                    children: _tabs.map((tab) => _buildTab(tab, viewModel)).toList(),
+                  );
+                },
               ),
             ),
           ),
@@ -179,7 +182,7 @@ class _StudentsScreenState extends State<StudentsScreen> {
                       delay: const Duration(milliseconds: 400),
                       child: SizedBox(
                         width: double.infinity,
-                        child: _buildAddStudentButton(context, viewModel),
+                        child: _buildAddStudentButton(context),
                       ),
                     ),
                   ],
@@ -198,7 +201,7 @@ class _StudentsScreenState extends State<StudentsScreen> {
                     FadeInSlide(
                       direction: FadeInDirection.rightToLeft,
                       delay: const Duration(milliseconds: 400),
-                      child: _buildAddStudentButton(context, viewModel),
+                      child: _buildAddStudentButton(context),
                     ),
                   ],
                 ),
@@ -216,9 +219,9 @@ class _StudentsScreenState extends State<StudentsScreen> {
     );
   }
 
-  Widget _buildAddStudentButton(BuildContext context, StudentsViewModel viewModel) {
+  Widget _buildAddStudentButton(BuildContext context) {
     return ElevatedButton.icon(
-      onPressed: () => _showAddStudentDialog(context, viewModel),
+      onPressed: () => _showAddStudentDialog(context, context.read<StudentsViewModel>()),
       icon: const Icon(Icons.add, size: 18),
       label: const Text('Add Student'),
       style: ElevatedButton.styleFrom(
@@ -234,8 +237,6 @@ class _StudentsScreenState extends State<StudentsScreen> {
 
   Widget _buildStudentsTable(BuildContext context) {
     final firebaseService = context.read<FirebaseService>();
-    final viewModel = context.watch<StudentsViewModel>();
-    final dashboardViewModel = context.watch<DashboardViewModel>();
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -273,41 +274,45 @@ class _StudentsScreenState extends State<StudentsScreen> {
                             return const SizedBox(height: 300, child: Center(child: Text('No students found.', style: TextStyle(color: Colors.grey))));
                           }
 
-                          var students = snapshot.data!;
-                          if (viewModel.selectedTab != 'All') {
-                            students = students.where((s) {
-                              if (viewModel.selectedTab == 'Active') return (s.status == 'Online' || s.status == 'Active') && !s.isBlocked;
-                              if (viewModel.selectedTab == 'Inactive') return (s.status == 'Offline' || s.status == 'Inactive') && !s.isBlocked;
-                              if (viewModel.selectedTab == 'Blocked') return s.isBlocked;
-                              return true;
-                            }).toList();
-                          }
+                          return Consumer2<StudentsViewModel, DashboardViewModel>(
+                            builder: (context, studentsVM, dashVM, _) {
+                              var students = snapshot.data!;
+                              if (studentsVM.selectedTab != 'All') {
+                                students = students.where((s) {
+                                  if (studentsVM.selectedTab == 'Active') return (s.status == 'Online' || s.status == 'Active') && !s.isBlocked;
+                                  if (studentsVM.selectedTab == 'Inactive') return (s.status == 'Offline' || s.status == 'Inactive') && !s.isBlocked;
+                                  if (studentsVM.selectedTab == 'Blocked') return s.isBlocked;
+                                  return true;
+                                }).toList();
+                              }
 
-                          final searchQuery = dashboardViewModel.searchQuery;
-                          if (searchQuery.isNotEmpty) {
-                            students = students.where((s) =>
-                              s.name.toLowerCase().contains(searchQuery.toLowerCase()) ||
-                              s.email.toLowerCase().contains(searchQuery.toLowerCase()) ||
-                              s.studentId.toLowerCase().contains(searchQuery.toLowerCase()) ||
-                              s.regNo.toLowerCase().contains(searchQuery.toLowerCase()) ||
-                              s.department.toLowerCase().contains(searchQuery.toLowerCase()) ||
-                              s.phoneNumber.contains(searchQuery)).toList();
-                          }
+                              final searchQuery = dashVM.searchQuery;
+                              if (searchQuery.isNotEmpty) {
+                                students = students.where((s) =>
+                                  s.name.toLowerCase().contains(searchQuery.toLowerCase()) ||
+                                  s.email.toLowerCase().contains(searchQuery.toLowerCase()) ||
+                                  s.studentId.toLowerCase().contains(searchQuery.toLowerCase()) ||
+                                  s.regNo.toLowerCase().contains(searchQuery.toLowerCase()) ||
+                                  s.department.toLowerCase().contains(searchQuery.toLowerCase()) ||
+                                  s.phoneNumber.contains(searchQuery)).toList();
+                              }
 
-                          return ListView.separated(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            padding: EdgeInsets.zero,
-                            itemCount: students.length,
-                            separatorBuilder: (context, index) => Divider(height: 1, color: Colors.grey.shade100),
-                            itemBuilder: (context, index) => _StudentRow(
-                              student: students[index], 
-                              viewModel: viewModel,
-                              onView: (s) => _showViewStudentDialog(context, s),
-                              onEdit: (s) => _showEditStudentDialog(context, viewModel, s),
-                              onDelete: (s) => _showDeleteConfirmation(context, viewModel, s),
-                              onSendNotification: (s) => _showSendNotificationDialog(context, s.id, s.name),
-                            ),
+                              return ListView.separated(
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
+                                padding: EdgeInsets.zero,
+                                itemCount: students.length,
+                                separatorBuilder: (context, index) => Divider(height: 1, color: Colors.grey.shade100),
+                                itemBuilder: (context, index) => _StudentRow(
+                                  student: students[index], 
+                                  viewModel: studentsVM,
+                                  onView: (s) => _showViewStudentDialog(context, s),
+                                  onEdit: (s) => _showEditStudentDialog(context, studentsVM, s),
+                                  onDelete: (s) => _showDeleteConfirmation(context, studentsVM, s),
+                                  onSendNotification: (s) => _showSendNotificationDialog(context, s.id, s.name),
+                                ),
+                              );
+                            },
                           );
                         },
                       ),

@@ -18,6 +18,8 @@ import 'package:unitransit_admin/view_models/support_view_model.dart';
 import 'package:unitransit_admin/view_models/app_settings_view_model.dart';
 import 'package:unitransit_admin/view_models/login_view_model.dart';
 import 'package:unitransit_admin/view_models/notifications_view_model.dart';
+import 'package:unitransit_admin/view_models/fleet_operations_view_model.dart';
+import 'package:unitransit_admin/view_models/buses_view_model.dart';
 import 'package:unitransit_admin/views/login_screen.dart';
 import 'package:unitransit_admin/views/splash_screen.dart';
 
@@ -72,6 +74,12 @@ void main() async {
           create: (context) => NotificationsViewModel(
             Provider.of<FirebaseService>(context, listen: false),
           ),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => FleetOperationsViewModel(),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => BusesViewModel(),
         ),
       ],
       child: const AdminPanelApp(),

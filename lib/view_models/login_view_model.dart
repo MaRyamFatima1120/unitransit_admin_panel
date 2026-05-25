@@ -10,15 +10,18 @@ class LoginViewModel extends ChangeNotifier {
   bool _isPasswordVisible = false;
   bool _isSuperAdmin = false;
   String _savedEmail = '';
+  String _subRole = 'All'; // Default to All/SuperAdmin access
 
   static const String _superAdminKey = 'is_super_admin';
+  static const String _subRoleKey = 'admin_sub_role';
   // This is a hashed version of the secret code. No one can tell what it is by looking!
-  static const String _secretSignature = '30383539'; 
+  static const String _secretSignature = '30383539';
 
   bool get isLoading => _isLoading;
   bool get isPasswordVisible => _isPasswordVisible;
   bool get isSuperAdmin => _isSuperAdmin;
   String get savedEmail => _savedEmail;
+  String get subRole => _subRole;
 
   LoginViewModel() {
     _loadSavedEmail();
@@ -40,13 +43,16 @@ class LoginViewModel extends ChangeNotifier {
   Future<void> _checkSuperAdminStatus() async {
     final prefs = await SharedPreferences.getInstance();
     _isSuperAdmin = prefs.getBool(_superAdminKey) ?? false;
+    _subRole = prefs.getString(_subRoleKey) ?? 'All';
     notifyListeners();
   }
 
-  Future<void> setSuperAdmin(bool value) async {
+  Future<void> setSuperAdmin(bool value, {String subRole = 'All'}) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_superAdminKey, value);
+    await prefs.setString(_subRoleKey, subRole);
     _isSuperAdmin = value;
+    _subRole = subRole;
     notifyListeners();
   }
 
@@ -67,17 +73,19 @@ class LoginViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final userCredential = await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: email.trim(),
-        password: password.trim(),
-      );
+      final userCredential = await FirebaseAuth.instance
+          .signInWithEmailAndPassword(
+            email: email.trim(),
+            password: password.trim(),
+          );
 
       // Verify role in Firestore by querying the email field
-      final userQuery = await FirebaseFirestore.instance
-          .collection('users')
-          .where('email', isEqualTo: email.trim())
-          .limit(1)
-          .get();
+      final userQuery =
+          await FirebaseFirestore.instance
+              .collection('users')
+              .where('email', isEqualTo: email.trim())
+              .limit(1)
+              .get();
 
       if (userQuery.docs.isEmpty) {
         await FirebaseAuth.instance.signOut();
@@ -90,6 +98,7 @@ class LoginViewModel extends ChangeNotifier {
       final role = userData['role']?.toString().toLowerCase().trim();
       final isBlocked = userData['isBlocked'] ?? false;
       final isVerified = userData['isVerified'] ?? false;
+      final subRole = userData['subRole']?.toString() ?? 'All';
 
       if (isBlocked) {
         await FirebaseAuth.instance.signOut();
@@ -107,13 +116,13 @@ class LoginViewModel extends ChangeNotifier {
       }
 
       if (!isVerified && role != 'super_admin') {
-         // Optional: Admins usually need verification too
-         // return 'Account Pending: Your administrative access is pending verification.';
+        // Optional: Admins usually need verification too
+        // return 'Account Pending: Your administrative access is pending verification.';
       }
 
       // Successful standard login, clear super admin just in case
-      await setSuperAdmin(false);
-      
+      await setSuperAdmin(false, subRole: subRole);
+
       await _saveEmail(email.trim());
       _isLoading = false;
       notifyListeners();
@@ -121,7 +130,7 @@ class LoginViewModel extends ChangeNotifier {
     } on FirebaseAuthException catch (e) {
       _isLoading = false;
       notifyListeners();
-      
+
       switch (e.code) {
         case 'user-not-found':
           return 'No user found with this email.';
@@ -156,7 +165,11 @@ class LoginViewModel extends ChangeNotifier {
 
   String _generateSimpleHash(String input) {
     // A secure-enough obfuscation for this purpose
-    return input.split('').reversed.map((e) => e.codeUnitAt(0).toRadixString(16)).join();
+    return input
+        .split('')
+        .reversed
+        .map((e) => e.codeUnitAt(0).toRadixString(16))
+        .join();
   }
 
   Future<void> logout() async {

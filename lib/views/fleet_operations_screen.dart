@@ -1,15 +1,14 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:firebase_database/firebase_database.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import 'package:unitransit_admin/core/constants/app_colors.dart';
 import 'package:unitransit_admin/core/utils/responsive_util.dart';
 import 'package:unitransit_admin/models/bus_schedule_model.dart';
 import 'package:unitransit_admin/core/utils/animations.dart';
+import 'package:unitransit_admin/view_models/fleet_operations_view_model.dart';
 
 class FleetOperationsScreen extends StatefulWidget {
   const FleetOperationsScreen({super.key});
@@ -21,39 +20,20 @@ class FleetOperationsScreen extends StatefulWidget {
 class _FleetOperationsScreenState extends State<FleetOperationsScreen> with TickerProviderStateMixin {
   final _searchController = TextEditingController();
   final MapController _mapController = MapController();
-  final DatabaseReference _busesRef = FirebaseDatabase.instance.ref('buses');
-  StreamSubscription? _busesSubscription;
-  StreamSubscription? _schedulesSubscription;
-
-  final LatLng _defaultCenter = const LatLng(29.378047555871532, 71.75750718286565); // Baghdad Campus
-
-  List<Map<String, dynamic>> _allBuses = [];
-  List<Map<String, dynamic>> _filteredBuses = [];
-  List<BusSchedule> _schedules = [];
-  String? _selectedBusId;
-  bool _isLoading = true;
-  String _selectedGenderFilter = 'All';
-
-  late DateTime _selectedDate;
-  late DateTime _currentMonth;
   final ScrollController _calendarScrollController = ScrollController();
-  final List<String> _weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  final LatLng _defaultCenter = const LatLng(29.378047555871532, 71.75750718286565);
 
   @override
   void initState() {
     super.initState();
-    _selectedDate = DateTime.now();
-    _currentMonth = DateTime(_selectedDate.year, _selectedDate.month);
-    _listenToActiveBuses();
-    _listenToSchedules();
-    _searchController.addListener(_applyFilters);
+    _searchController.addListener(() {
+      context.read<FleetOperationsViewModel>().updateSearchQuery(_searchController.text);
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToSelectedDate());
   }
 
   @override
   void dispose() {
-    _busesSubscription?.cancel();
-    _schedulesSubscription?.cancel();
     _searchController.dispose();
     _calendarScrollController.dispose();
     super.dispose();
@@ -61,7 +41,8 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
 
   void _scrollToSelectedDate() {
     if (_calendarScrollController.hasClients) {
-      final index = _selectedDate.day - 1;
+      final vm = context.read<FleetOperationsViewModel>();
+      final index = vm.selectedDate.day - 1;
       _calendarScrollController.animateTo(
         index * 58.0,
         duration: const Duration(milliseconds: 300),
@@ -70,267 +51,40 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
     }
   }
 
-  List<DateTime> _generateDaysInMonth(DateTime month) {
-    final lastDayOfMonth = DateTime(month.year, month.month + 1, 0);
-    return List.generate(
-      lastDayOfMonth.day,
-      (index) => DateTime(month.year, month.month, index + 1),
-    );
-  }
-
-  String _getMonthName(DateTime date) {
-    const months = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December'
-    ];
-    return months[date.month - 1];
-  }
-
-  String _getWeekdayName(DateTime date) {
-    return _weekdays[date.weekday - 1];
-  }
-
-  String _formatDate(DateTime date) {
-    return "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
-  }
-
-  void _changeMonth(int offset) {
-    setState(() {
-      _currentMonth = DateTime(_currentMonth.year, _currentMonth.month + offset);
-      if (_currentMonth.year == DateTime.now().year && _currentMonth.month == DateTime.now().month) {
-        _selectedDate = DateTime.now();
-      } else {
-        _selectedDate = DateTime(_currentMonth.year, _currentMonth.month, 1);
-      }
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToSelectedDate());
-  }
-
-  void _listenToActiveBuses() {
-    _busesSubscription = _busesRef.onValue.listen((event) {
-      final data = event.snapshot.value as Map<dynamic, dynamic>?;
-      final List<Map<String, dynamic>> loadedBuses = [];
-
-      if (data != null) {
-        data.forEach((key, value) {
-          if (value is Map) {
-            loadedBuses.add({
-              'id': key.toString(),
-              ...Map<String, dynamic>.from(value),
-            });
-          }
-        });
-      }
-
-      if (mounted) {
-        setState(() {
-          _allBuses = loadedBuses;
-          _isLoading = false;
-          _applyFilters();
-        });
-      }
-    }, onError: (error) {
-      debugPrint("Error loading active buses: $error");
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    });
-  }
-
-  void _listenToSchedules() {
-    _schedulesSubscription = FirebaseFirestore.instance
-        .collection('schedules')
-        .snapshots()
-        .listen((snapshot) {
-      final List<BusSchedule> loadedSchedules = snapshot.docs
-          .map((doc) => BusSchedule.fromMap(doc.id, doc.data()))
-          .toList();
-      if (mounted) {
-        setState(() {
-          _schedules = loadedSchedules;
-        });
-      }
-    });
-  }
-
-  BusSchedule? _getMatchingSchedule(Map<String, dynamic> bus) {
-    if (_schedules.isEmpty) return null;
-    final busNum = (bus['busNumber'] ?? '').toString().toLowerCase().trim();
-    if (busNum.isEmpty) return null;
-
-    final matchedByBus = _schedules.where((s) {
-      final sBus = (s.busNumber ?? '').toLowerCase().trim();
-      return sBus == busNum || sBus.contains(busNum) || busNum.contains(sBus);
-    }).toList();
-
-    if (matchedByBus.isNotEmpty) {
-      final selectedWeekday = DateFormat('EEEE').format(_selectedDate);
-      final selectedDateStr = _formatDate(_selectedDate);
-      for (var schedule in matchedByBus) {
-        if (schedule.date == selectedDateStr) {
-          return schedule;
-        }
-      }
-      for (var schedule in matchedByBus) {
-        if (schedule.operatingDays != null && schedule.operatingDays!.contains(selectedWeekday)) {
-          return schedule;
-        }
-      }
-      return matchedByBus.first;
-    }
-
-    final matchedByRoute = _schedules.where((s) {
-      final sFrom = s.from.toLowerCase().trim();
-      final sTo = s.to.toLowerCase().trim();
-      final busFrom = (bus['from'] ?? '').toString().toLowerCase().trim();
-      final busTo = (bus['to'] ?? '').toString().toLowerCase().trim();
-
-      return sFrom == busFrom && sTo == busTo;
-    }).toList();
-
-    if (matchedByRoute.isNotEmpty) {
-      final selectedDateStr = _formatDate(_selectedDate);
-      for (var schedule in matchedByRoute) {
-        if (schedule.date == selectedDateStr) {
-          return schedule;
-        }
-      }
-      return matchedByRoute.first;
-    }
-
-    return null;
-  }
-
-  int get _totalSchedulesToday {
-    final selectedWeekday = DateFormat('EEEE').format(_selectedDate);
-    final selectedDateStr = _formatDate(_selectedDate);
-    return _schedules.where((s) {
-      final isDay = s.operatingDays != null && s.operatingDays!.contains(selectedWeekday);
-      final isDate = s.date != null && s.date == selectedDateStr;
-      return isDay || isDate;
-    }).length;
-  }
-
-  int get _activeSchedulesToday {
-    final selectedWeekday = DateFormat('EEEE').format(_selectedDate);
-    final selectedDateStr = _formatDate(_selectedDate);
-    final todaySchedules = _schedules.where((s) {
-      final isDay = s.operatingDays != null && s.operatingDays!.contains(selectedWeekday);
-      final isDate = s.date != null && s.date == selectedDateStr;
-      return isDay || isDate;
-    }).toList();
-
-    int count = 0;
-    for (var schedule in todaySchedules) {
-      final isAnyBusCovering = _allBuses.any((bus) {
-        final busNum = (bus['busNumber'] ?? '').toString().toLowerCase().trim();
-        final sBus = (schedule.busNumber ?? '').toLowerCase().trim();
-        if (sBus == busNum && busNum.isNotEmpty) return true;
-
-        final sFrom = schedule.from.toLowerCase().trim();
-        final sTo = schedule.to.toLowerCase().trim();
-        final busFrom = (bus['from'] ?? '').toString().toLowerCase().trim();
-        final busTo = (bus['to'] ?? '').toString().toLowerCase().trim();
-        return sFrom == busFrom && sTo == busTo;
-      });
-      if (isAnyBusCovering) count++;
-    }
-    return count;
-  }
-
-  void _applyFilters() {
-    final query = _searchController.text.toLowerCase().trim();
-    List<Map<String, dynamic>> temp = _allBuses;
-
-    // Filter by search query
-    if (query.isNotEmpty) {
-      temp = temp.where((bus) {
-        final busNum = (bus['busNumber'] ?? '').toString().toLowerCase();
-        final driver = (bus['driverName'] ?? '').toString().toLowerCase();
-        final from = (bus['from'] ?? '').toString().toLowerCase();
-        final to = (bus['to'] ?? '').toString().toLowerCase();
-        final plate = (bus['plateNumber'] ?? '').toString().toLowerCase();
-
-        return busNum.contains(query) ||
-            driver.contains(query) ||
-            from.contains(query) ||
-            to.contains(query) ||
-            plate.contains(query);
-      }).toList();
-    }
-
-    // Filter by gender selection
-    if (_selectedGenderFilter != 'All') {
-      temp = temp.where((bus) {
-        final gender = (bus['gender'] ?? '').toString().toLowerCase();
-        return gender == _selectedGenderFilter.toLowerCase();
-      }).toList();
-    }
-
-    setState(() {
-      _filteredBuses = temp;
-    });
-  }
-
   void _locateBus(Map<String, dynamic> bus) {
     final lat = (bus['latitude'] as num?)?.toDouble() ?? 0.0;
     final lng = (bus['longitude'] as num?)?.toDouble() ?? 0.0;
-
     if (lat != 0.0 && lng != 0.0) {
-      setState(() {
-        _selectedBusId = bus['id'];
-      });
+      context.read<FleetOperationsViewModel>().selectBus(bus['id']);
       _animatedMapMove(LatLng(lat, lng), 16.0);
     }
   }
 
   void _animatedMapMove(LatLng destLocation, double destZoom) {
-    final latTween = Tween<double>(
-      begin: _mapController.camera.center.latitude,
-      end: destLocation.latitude,
-    );
-    final lngTween = Tween<double>(
-      begin: _mapController.camera.center.longitude,
-      end: destLocation.longitude,
-    );
-    final zoomTween = Tween<double>(
-      begin: _mapController.camera.zoom,
-      end: destZoom,
-    );
-
-    final controller = AnimationController(
-      duration: const Duration(milliseconds: 800),
-      vsync: this,
-    );
-    final animation = CurvedAnimation(
-      parent: controller,
-      curve: Curves.fastOutSlowIn,
-    );
-
+    final latTween = Tween<double>(begin: _mapController.camera.center.latitude, end: destLocation.latitude);
+    final lngTween = Tween<double>(begin: _mapController.camera.center.longitude, end: destLocation.longitude);
+    final zoomTween = Tween<double>(begin: _mapController.camera.zoom, end: destZoom);
+    final controller = AnimationController(duration: const Duration(milliseconds: 800), vsync: this);
+    final animation = CurvedAnimation(parent: controller, curve: Curves.fastOutSlowIn);
     controller.addListener(() {
       _mapController.move(
         LatLng(latTween.evaluate(animation), lngTween.evaluate(animation)),
         zoomTween.evaluate(animation),
       );
     });
-
     animation.addStatusListener((status) {
       if (status == AnimationStatus.completed || status == AnimationStatus.dismissed) {
         controller.dispose();
       }
     });
-
     controller.forward();
   }
 
   @override
   Widget build(BuildContext context) {
     final isMobile = AppResponsiveUtil.isMobile(context);
-    final selectedBus = _selectedBusId != null
-        ? _allBuses.firstWhere((b) => b['id'] == _selectedBusId, orElse: () => {})
-        : null;
+    final vm = context.watch<FleetOperationsViewModel>();
+    final selectedBus = vm.selectedBus;
 
     return FadeInSlide(
       duration: const Duration(milliseconds: 600),
@@ -367,7 +121,7 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
                   ),
                   if (!isMobile) ...[
                     const SizedBox(width: 16),
-                    _buildStatsBadges(),
+                    _buildStatsBadges(vm),
                   ],
                 ],
               ),
@@ -377,12 +131,12 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
               FadeInSlide(
                 direction: FadeInDirection.bottomToTop,
                 delay: const Duration(milliseconds: 100),
-                child: _buildStatsBadges()
+                child: _buildStatsBadges(vm)
               ),
               const SizedBox(height: 16),
             ],
 
-            _buildCalendarSection(),
+            _buildCalendarSection(vm),
             const SizedBox(height: 16),
 
             // Split View layout
@@ -406,7 +160,7 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
                           color: AppColors.cardWhite,
                           child: Padding(
                             padding: const EdgeInsets.all(16.0),
-                            child: _buildDirectoryList(),
+                            child: _buildDirectoryList(vm),
                           ),
                         ),
                       ),
@@ -440,8 +194,11 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
                                     urlTemplate: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
                                     subdomains: const ['a', 'b', 'c', 'd'],
                                   ),
+                                  PolylineLayer(
+                                    polylines: _buildMapPolylines(vm),
+                                  ),
                                   MarkerLayer(
-                                    markers: _buildMapMarkers(),
+                                    markers: _buildMapMarkers(vm),
                                   ),
                                 ],
                               ),
@@ -482,7 +239,7 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
                                   left: 16,
                                   bottom: 16,
                                   right: isMobile ? 80 : 16,
-                                  child: _buildSelectedBusDetailsCard(selectedBus),
+                                  child: _buildSelectedBusDetailsCard(selectedBus, vm),
                                 ),
 
                               // Mobile Drawer/Directory Toggle
@@ -521,7 +278,7 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
                                                 ),
                                                 const SizedBox(height: 16),
                                                 Expanded(
-                                                  child: _buildDirectoryList(),
+                                                  child: _buildDirectoryList(vm),
                                                 ),
                                               ],
                                             ),
@@ -546,8 +303,8 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
     );
   }
 
-  Widget _buildStatsBadges() {
-    final activeCount = _allBuses.length;
+  Widget _buildStatsBadges(FleetOperationsViewModel vm) {
+    final activeCount = vm.activeCount;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -601,7 +358,7 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
     );
   }
 
-  Widget _buildDirectoryList() {
+  Widget _buildDirectoryList(FleetOperationsViewModel vm) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -627,7 +384,7 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
           ),
         ),
         const SizedBox(height: 12),
-        _buildScheduleProgressWidget(),
+        _buildScheduleProgressWidget(vm),
         const SizedBox(height: 12),
 
         // Quick Gender Filters
@@ -635,7 +392,7 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
           scrollDirection: Axis.horizontal,
           child: Row(
             children: ['All', 'Boys', 'Girls', 'Combined'].map((gender) {
-              final isSelected = _selectedGenderFilter == gender;
+              final isSelected = vm.selectedGenderFilter == gender;
               return Padding(
                 padding: const EdgeInsets.only(right: 6),
                 child: ChoiceChip(
@@ -660,10 +417,7 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   onSelected: (selected) {
                     if (selected) {
-                      setState(() {
-                        _selectedGenderFilter = gender;
-                        _applyFilters();
-                      });
+                      vm.setGenderFilter(gender);
                     }
                   },
                 ),
@@ -671,20 +425,44 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
             }).toList(),
           ),
         ),
+        const SizedBox(height: 8),
+
+        // Route Filter
+        _buildFilterDropdown(
+          icon: Icons.route_rounded,
+          label: 'Route',
+          value: vm.selectedRouteFilter,
+          items: vm.uniqueRoutes,
+          onChanged: (val) {
+            vm.setRouteFilter(val ?? 'All');
+          },
+        ),
+        const SizedBox(height: 6),
+
+        // Bus Number Filter
+        _buildFilterDropdown(
+          icon: Icons.directions_bus_rounded,
+          label: 'Bus',
+          value: vm.selectedBusNumberFilter,
+          items: vm.uniqueBusNumbers,
+          onChanged: (val) {
+            vm.setBusNumberFilter(val ?? 'All');
+          },
+        ),
         const SizedBox(height: 16),
 
         // Bus listings
         Expanded(
-          child: _isLoading
+          child: vm.isLoading
               ? const Center(child: CircularProgressIndicator(color: AppColors.primaryNavy))
-              : _filteredBuses.isEmpty
-                  ? _buildEmptyListState()
+              : vm.filteredBuses.isEmpty
+                  ? _buildEmptyListState(vm)
                   : ListView.separated(
-                      itemCount: _filteredBuses.length,
+                      itemCount: vm.filteredBuses.length,
                       separatorBuilder: (context, index) => const SizedBox(height: 10),
                       itemBuilder: (context, index) {
-                        final bus = _filteredBuses[index];
-                        final isSelected = _selectedBusId == bus['id'];
+                        final bus = vm.filteredBuses[index];
+                        final isSelected = vm.selectedBusId == bus['id'];
                         final speed = (bus['speed'] as num?)?.toDouble() ?? 0.0;
                         final lastUpdated = bus['lastUpdated'] != null
                             ? DateTime.fromMillisecondsSinceEpoch(bus['lastUpdated'] as int)
@@ -695,7 +473,7 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
                           isSelected: isSelected,
                           speed: speed,
                           lastUpdated: lastUpdated,
-                          matchedSchedule: _getMatchingSchedule(bus),
+                          matchedSchedule: vm.getMatchingSchedule(bus),
                           onTap: () => _locateBus(bus),
                         );
                       },
@@ -707,7 +485,7 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
 
 
 
-  Widget _buildEmptyListState() {
+  Widget _buildEmptyListState(FleetOperationsViewModel vm) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -718,16 +496,91 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
             'No active buses found.',
             style: GoogleFonts.poppins(color: AppColors.textSecondary, fontSize: 13, fontWeight: FontWeight.w600),
           ),
+          if (vm.hasActiveFilters)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: TextButton.icon(
+                onPressed: () {
+                  _searchController.clear();
+                  vm.clearAllFilters();
+                },
+                icon: const Icon(Icons.filter_alt_off_rounded, size: 16),
+                label: Text('Clear all filters', style: GoogleFonts.poppins(fontSize: 12)),
+              ),
+            ),
         ],
       ),
     );
   }
 
-  Widget _buildSelectedBusDetailsCard(Map<String, dynamic> bus) {
+  Widget _buildFilterDropdown({
+    required IconData icon,
+    required String label,
+    required String value,
+    required List<String> items,
+    required void Function(String?) onChanged,
+  }) {
+    return Container(
+      height: 38,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: value != 'All' ? AppColors.primaryNavy.withValues(alpha: 0.06) : const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: value != 'All' ? AppColors.primaryNavy.withValues(alpha: 0.3) : AppColors.borderLight,
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 15, color: value != 'All' ? AppColors.primaryNavy : AppColors.textSecondary),
+          const SizedBox(width: 6),
+          Text(
+            '$label:',
+            style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: items.contains(value) ? value : 'All',
+                isExpanded: true,
+                isDense: true,
+                icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: AppColors.textSecondary),
+                style: GoogleFonts.poppins(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: value != 'All' ? AppColors.primaryNavy : AppColors.textDark,
+                ),
+                items: items.map((item) => DropdownMenuItem(
+                  value: item,
+                  child: Text(
+                    item,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w500),
+                  ),
+                )).toList(),
+                onChanged: onChanged,
+              ),
+            ),
+          ),
+          if (value != 'All')
+            GestureDetector(
+              onTap: () => onChanged('All'),
+              child: Padding(
+                padding: const EdgeInsets.only(left: 4),
+                child: Icon(Icons.close, size: 14, color: AppColors.textSecondary.withValues(alpha: 0.6)),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSelectedBusDetailsCard(Map<String, dynamic> bus, FleetOperationsViewModel vm) {
     final speed = (bus['speed'] as num?)?.toDouble() ?? 0.0;
     final plate = bus['plateNumber']?.toString() ?? 'N/A';
     final remainingTime = bus['remainingTime']?.toString() ?? 'N/A';
-    final matchedSchedule = _getMatchingSchedule(bus);
+    final matchedSchedule = vm.getMatchingSchedule(bus);
 
     return Card(
       elevation: 6,
@@ -765,7 +618,7 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
                 ),
                 IconButton(
                   icon: const Icon(Icons.close, size: 18),
-                  onPressed: () => setState(() => _selectedBusId = null),
+                  onPressed: () => vm.selectBus(null),
                 ),
               ],
             ),
@@ -876,11 +729,48 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
     );
   }
 
-  List<Marker> _buildMapMarkers() {
-    return _filteredBuses.map((bus) {
+  List<Polyline> _buildMapPolylines(FleetOperationsViewModel vm) {
+    final List<Polyline> list = [];
+    
+    // 1. If a specific route is filtered, show its polyline
+    if (vm.selectedRouteFilter != 'All') {
+      final points = vm.polylines[vm.selectedRouteFilter];
+      if (points != null && points.isNotEmpty) {
+        list.add(Polyline(
+          points: points,
+          strokeWidth: 4,
+          color: AppColors.primaryNavy.withValues(alpha: 0.6),
+        ));
+      }
+    }
+    
+    // 2. If a bus is selected, show its polyline (if not already added as main filter)
+    final selectedBus = vm.selectedBus;
+    if (selectedBus != null) {
+      final from = (selectedBus['from'] ?? '').toString().trim();
+      final to = (selectedBus['to'] ?? '').toString().trim();
+      final routeKey = '$from ➔ $to';
+      
+      if (routeKey != vm.selectedRouteFilter) {
+        final points = vm.polylines[routeKey];
+        if (points != null && points.isNotEmpty) {
+          list.add(Polyline(
+            points: points,
+            strokeWidth: 4,
+            color: AppColors.accentAmber.withValues(alpha: 0.4),
+          ));
+        }
+      }
+    }
+    
+    return list;
+  }
+
+  List<Marker> _buildMapMarkers(FleetOperationsViewModel vm) {
+    return vm.filteredBuses.map((bus) {
       final lat = (bus['latitude'] as num?)?.toDouble() ?? 0.0;
       final lng = (bus['longitude'] as num?)?.toDouble() ?? 0.0;
-      final isSelected = _selectedBusId == bus['id'];
+      final isSelected = vm.selectedBusId == bus['id'];
       final gender = (bus['gender'] ?? 'Combined').toString();
       final genderColor = gender.toLowerCase() == 'girls'
           ? Colors.pinkAccent
@@ -892,9 +782,7 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
         height: 80,
         child: GestureDetector(
           onTap: () {
-            setState(() {
-              _selectedBusId = bus['id'];
-            });
+            vm.selectBus(bus['id']);
             _animatedMapMove(LatLng(lat, lng), 15.5);
           },
           child: Column(
@@ -976,9 +864,9 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
     }).toList();
   }
 
-  Widget _buildScheduleProgressWidget() {
-    final total = _totalSchedulesToday;
-    final active = _activeSchedulesToday;
+  Widget _buildScheduleProgressWidget(FleetOperationsViewModel vm) {
+    final total = vm.totalSchedulesToday;
+    final active = vm.activeSchedulesToday;
     final progress = total > 0 ? (active / total) : 0.0;
 
     return Container(
@@ -999,9 +887,9 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
                   const Icon(Icons.event_note_rounded, color: AppColors.primaryNavy, size: 16),
                   const SizedBox(width: 6),
                   Text(
-                    DateFormat('yyyy-MM-dd').format(_selectedDate) == DateFormat('yyyy-MM-dd').format(DateTime.now())
+                    DateFormat('yyyy-MM-dd').format(vm.selectedDate) == DateFormat('yyyy-MM-dd').format(DateTime.now())
                         ? "Today's Schedule Runs"
-                        : "${DateFormat('MMM d').format(_selectedDate)} Schedule Runs",
+                        : "${DateFormat('MMM d').format(vm.selectedDate)} Schedule Runs",
                     style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textDark),
                   ),
                 ],
@@ -1027,8 +915,8 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
     );
   }
 
-  Widget _buildCalendarSection() {
-    final days = _generateDaysInMonth(_currentMonth);
+  Widget _buildCalendarSection(FleetOperationsViewModel vm) {
+    final days = vm.daysInMonth;
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(12),
@@ -1054,7 +942,7 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
                   const Icon(Icons.calendar_today_rounded, color: AppColors.primaryNavy, size: 18),
                   const SizedBox(width: 8),
                   Text(
-                    '${_getMonthName(_currentMonth)} ${_currentMonth.year}',
+                    '${vm.monthName} ${vm.currentMonth.year}',
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
@@ -1066,7 +954,10 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
               Row(
                 children: [
                   IconButton(
-                    onPressed: () => _changeMonth(-1),
+                    onPressed: () {
+                      vm.changeMonth(-1);
+                      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToSelectedDate());
+                    },
                     icon: const Icon(Icons.chevron_left_rounded, size: 18),
                     style: IconButton.styleFrom(
                       backgroundColor: AppColors.backgroundLight,
@@ -1076,7 +967,10 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
                   ),
                   const SizedBox(width: 6),
                   IconButton(
-                    onPressed: () => _changeMonth(1),
+                    onPressed: () {
+                      vm.changeMonth(1);
+                      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToSelectedDate());
+                    },
                     icon: const Icon(Icons.chevron_right_rounded, size: 18),
                     style: IconButton.styleFrom(
                       backgroundColor: AppColors.backgroundLight,
@@ -1097,15 +991,13 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
               itemCount: days.length,
               itemBuilder: (context, index) {
                 final dayDate = days[index];
-                final isSelected = dayDate.day == _selectedDate.day &&
-                    dayDate.month == _selectedDate.month &&
-                    dayDate.year == _selectedDate.year;
+                final isSelected = dayDate.day == vm.selectedDate.day &&
+                    dayDate.month == vm.selectedDate.month &&
+                    dayDate.year == vm.selectedDate.year;
 
                 return GestureDetector(
                   onTap: () {
-                    setState(() {
-                      _selectedDate = dayDate;
-                    });
+                    vm.selectDate(dayDate);
                   },
                   child: Container(
                     width: 50,
@@ -1121,7 +1013,7 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen> with Tick
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          _getWeekdayName(dayDate).substring(0, 3).toUpperCase(),
+                          vm.getWeekdayName(dayDate).substring(0, 3).toUpperCase(),
                           style: TextStyle(
                             fontSize: 8,
                             fontWeight: FontWeight.w800,

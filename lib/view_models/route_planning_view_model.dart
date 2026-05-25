@@ -208,7 +208,7 @@ class RoutePlanningViewModel extends ChangeNotifier {
   }
 
   Future<void> deleteRoute(String id, String routeName) async {
-    await _firebaseService.deleteBusSchedule(id, routeName);
+    await _firebaseService.deleteBusSchedule(id, routeName, forceDeleteRoute: true);
     notifyListeners();
   }
 

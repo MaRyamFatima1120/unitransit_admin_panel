@@ -219,8 +219,6 @@ class _GenderConfigScreenState extends State<GenderConfigScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final viewModel = context.watch<GenderConfigViewModel>();
-    final isSuperAdmin = context.watch<LoginViewModel>().isSuperAdmin;
     final isDesktop = AppResponsiveUtil.isDesktop(context);
     final isMobile = AppResponsiveUtil.isMobile(context);
 
@@ -233,14 +231,20 @@ class _GenderConfigScreenState extends State<GenderConfigScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildHeader(context, isMobile, isSuperAdmin),
+              _buildHeader(context, isMobile),
               const SizedBox(height: 32),
               Expanded(
-                child: viewModel.isLoading
-                    ? const Center(child: CircularProgressIndicator())
-                    : viewModel.genderConfigs.isEmpty
-                        ? _buildEmptyState()
-                        : _buildGenderGrid(viewModel, isDesktop, isSuperAdmin),
+                child: Consumer2<GenderConfigViewModel, LoginViewModel>(
+                  builder: (context, viewModel, loginViewModel, _) {
+                    if (viewModel.isLoading) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    if (viewModel.genderConfigs.isEmpty) {
+                      return _buildEmptyState();
+                    }
+                    return _buildGenderGrid(viewModel, isDesktop, loginViewModel.isSuperAdmin);
+                  },
+                ),
               ),
             ],
           ),
@@ -249,7 +253,7 @@ class _GenderConfigScreenState extends State<GenderConfigScreen> {
     );
   }
 
-  Widget _buildHeader(BuildContext context, bool isMobile, bool isSuperAdmin) {
+  Widget _buildHeader(BuildContext context, bool isMobile) {
     return FadeInSlide(
       direction: FadeInDirection.leftToRight,
       child: Wrap(

@@ -7,6 +7,8 @@ import 'package:unitransit_admin/models/driver_model.dart';
 import 'package:unitransit_admin/models/bus_schedule_model.dart';
 import 'package:unitransit_admin/core/utils/responsive_util.dart';
 import 'package:unitransit_admin/view_models/dashboard_view_model.dart';
+import 'package:unitransit_admin/view_models/buses_view_model.dart';
+
 
 class AssignRoutesScreen extends StatefulWidget {
   const AssignRoutesScreen({super.key});
@@ -356,15 +358,16 @@ class _AssignRoutesScreenState extends State<AssignRoutesScreen> {
                 final selectedDayName = _getWeekdayName(_selectedDate);
 
                 var schedules = allSchedules.where((schedule) {
-                  // Filter by Date & Weekdays
+                  // Filter by Date
                   if (schedule.date != null && schedule.date!.isNotEmpty) {
                     return schedule.date == selectedDateStr;
                   }
+                  // Filter by explicit operating days (recurring schedules)
                   if (schedule.operatingDays != null && schedule.operatingDays!.isNotEmpty) {
                     return schedule.operatingDays!.contains(selectedDayName);
                   }
-                  // Default Daily schedules do not run on weekends (Saturday & Sunday)
-                  return selectedDayName != 'Saturday' && selectedDayName != 'Sunday';
+                  // Do not show Master Route templates (which have date == null and operatingDays == empty) in daily view
+                  return false;
                 }).toList();
 
                 if (_searchQuery.isNotEmpty) {
@@ -753,31 +756,170 @@ class _AssignRoutesScreenState extends State<AssignRoutesScreen> {
       );
     }
 
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      decoration: BoxDecoration(
-        color: isSelected ? AppColors.primaryNavy.withOpacity(0.04) : Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isSelected ? AppColors.primaryNavy : AppColors.borderLight,
-          width: isSelected ? 1.5 : 1,
+    return Dismissible(
+      key: Key('schedule_${schedule.id}'),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.red.shade600,
+          borderRadius: BorderRadius.circular(12),
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(isSelected ? 0.04 : 0.01),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 24),
+        child: const Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.delete_forever_rounded, color: Colors.white, size: 28),
+            SizedBox(height: 4),
+            Text('Delete', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
+          ],
+        ),
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(11),
-        child: InkWell(
-          onTap: () => _selectSchedule(schedule),
-          hoverColor: AppColors.primaryNavy.withOpacity(0.02),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: content,
+      confirmDismiss: (direction) async {
+        return await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, color: Colors.red, size: 22),
+                SizedBox(width: 10),
+                Text('Delete Assignment', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ],
+            ),
+            content: Text(
+              'Are you sure you want to delete the assignment for route "${schedule.route}"?\n\nThis cannot be undone.',
+              style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+                child: const Text('Delete'),
+              ),
+            ],
+          ),
+        ) ?? false;
+      },
+      onDismissed: (direction) async {
+        final firebaseService = context.read<FirebaseService>();
+        try {
+          await firebaseService.deleteBusSchedule(schedule.id, schedule.route);
+          if (_selectedSchedule?.id == schedule.id) {
+            setState(() => _selectedSchedule = null);
+          }
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text('Route "${schedule.route}" deleted.'),
+              backgroundColor: Colors.green.shade700,
+              behavior: SnackBarBehavior.floating,
+            ));
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text('Failed to delete: $e'),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+            ));
+          }
+        }
+      },
+      child: GestureDetector(
+        onLongPress: () {
+          showModalBottomSheet(
+            context: context,
+            shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+            builder: (ctx) => SafeArea(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(width: 40, height: 4, margin: const EdgeInsets.only(top: 12, bottom: 16), decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Text(schedule.route, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textDark), maxLines: 2, overflow: TextOverflow.ellipsis),
+                  ),
+                  const Divider(height: 24),
+                  ListTile(
+                    leading: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: AppColors.primaryNavy.withOpacity(0.08), shape: BoxShape.circle), child: const Icon(Icons.edit_rounded, color: AppColors.primaryNavy, size: 20)),
+                    title: const Text('Edit Assignment', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                    subtitle: const Text('Modify driver, bus or time', style: TextStyle(fontSize: 11)),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _selectSchedule(schedule);
+                    },
+                  ),
+                  ListTile(
+                    leading: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.red.withOpacity(0.08), shape: BoxShape.circle), child: const Icon(Icons.delete_forever_rounded, color: Colors.red, size: 20)),
+                    title: const Text('Delete Assignment', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Colors.red)),
+                    subtitle: const Text('Remove this route permanently', style: TextStyle(fontSize: 11)),
+                    onTap: () async {
+                      Navigator.pop(ctx);
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (d) => AlertDialog(
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          title: const Text('Delete Assignment'),
+                          content: Text('Delete route "${schedule.route}"? This cannot be undone.'),
+                          actions: [
+                            TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('Cancel')),
+                            ElevatedButton(
+                              onPressed: () => Navigator.pop(d, true),
+                              style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+                              child: const Text('Delete'),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirm == true && mounted) {
+                        final firebaseService = context.read<FirebaseService>();
+                        await firebaseService.deleteBusSchedule(schedule.id, schedule.route);
+                        if (_selectedSchedule?.id == schedule.id) setState(() => _selectedSchedule = null);
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                            content: Text('Route "${schedule.route}" deleted.'),
+                            backgroundColor: Colors.green.shade700,
+                            behavior: SnackBarBehavior.floating,
+                          ));
+                        }
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                ],
+              ),
+            ),
+          );
+        },
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          decoration: BoxDecoration(
+            color: isSelected ? AppColors.primaryNavy.withOpacity(0.04) : Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isSelected ? AppColors.primaryNavy : AppColors.borderLight,
+              width: isSelected ? 1.5 : 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(isSelected ? 0.04 : 0.01),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(11),
+            child: InkWell(
+              onTap: () => _selectSchedule(schedule),
+              hoverColor: AppColors.primaryNavy.withOpacity(0.02),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: content,
+              ),
+            ),
           ),
         ),
       ),
@@ -949,33 +1091,106 @@ class _AssignRoutesScreenState extends State<AssignRoutesScreen> {
           // Bus ID
           const Text('ASSIGN BUS ID / NUMBER', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 10, color: AppColors.primaryNavy, letterSpacing: 1.5)),
           const SizedBox(height: 12),
-          TextField(
-            controller: _busController,
-            onChanged: (val) => setState(() {}),
-            decoration: InputDecoration(
-              hintText: 'Enter bus ID or number...',
-              prefixIcon: const Icon(Icons.directions_bus_outlined, color: AppColors.primaryNavy),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: AppColors.borderLight)),
-              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.primaryNavy)),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            ),
+          Builder(
+            builder: (context) {
+              final busesList = Provider.of<BusesViewModel>(context).buses;
+              bool hasCurrentValue = false;
+              if (_busController.text.isNotEmpty) {
+                for (var bus in busesList) {
+                  if (bus['busNumber'].toString() == _busController.text) {
+                    hasCurrentValue = true;
+                    break;
+                  }
+                }
+              }
+              
+              return DropdownButtonFormField<String>(
+                value: _busController.text.isNotEmpty ? _busController.text : null,
+                decoration: InputDecoration(
+                  hintText: 'Select Bus from Fleet',
+                  prefixIcon: const Icon(Icons.directions_bus_outlined, color: AppColors.primaryNavy),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: AppColors.borderLight)),
+                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.primaryNavy)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                ),
+                items: [
+                  if (_busController.text.isNotEmpty && !hasCurrentValue)
+                    DropdownMenuItem(value: _busController.text, child: Text("Current: ${_busController.text}")),
+                  ...busesList.map((bus) {
+                    final busNumber = bus['busNumber'].toString();
+                    return DropdownMenuItem(value: busNumber, child: Text('Bus $busNumber'));
+                  }),
+                ],
+                onChanged: (val) {
+                  if (val != null) setState(() => _busController.text = val);
+                },
+              );
+            }
           ),
 
           const SizedBox(height: 24),
           // Departure Time
           const Text('ASSIGN DEPARTURE TIME', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 10, color: AppColors.primaryNavy, letterSpacing: 1.5)),
           const SizedBox(height: 12),
-          TextField(
-            controller: _timeController,
-            onChanged: (val) => setState(() {}),
-            decoration: InputDecoration(
-              hintText: 'Enter departure time (e.g. 08:30 AM)...',
-              prefixIcon: const Icon(Icons.access_time_rounded, color: AppColors.primaryNavy),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: AppColors.borderLight)),
-              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.primaryNavy)),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          GestureDetector(
+            onTap: () async {
+              // Parse existing time if already set
+              TimeOfDay initialTime = TimeOfDay.now();
+              final existing = _timeController.text.trim();
+              if (existing.isNotEmpty && existing != 'TBA' && existing != 'Live') {
+                try {
+                  final parts = existing.replaceAll('AM', '').replaceAll('PM', '').trim().split(':');
+                  int hour = int.parse(parts[0]);
+                  int minute = int.parse(parts[1].trim());
+                  if (existing.contains('PM') && hour != 12) hour += 12;
+                  if (existing.contains('AM') && hour == 12) hour = 0;
+                  initialTime = TimeOfDay(hour: hour, minute: minute);
+                } catch (_) {}
+              }
+
+              final picked = await showTimePicker(
+                context: context,
+                initialTime: initialTime,
+                builder: (context, child) {
+                  return Theme(
+                    data: Theme.of(context).copyWith(
+                      colorScheme: const ColorScheme.light(
+                        primary: AppColors.primaryNavy,
+                        onPrimary: Colors.white,
+                        surface: Colors.white,
+                        onSurface: AppColors.textDark,
+                      ),
+                    ),
+                    child: child!,
+                  );
+                },
+              );
+
+              if (picked != null) {
+                final hour = picked.hour;
+                final minute = picked.minute.toString().padLeft(2, '0');
+                final period = hour >= 12 ? 'PM' : 'AM';
+                final displayHour = hour % 12 == 0 ? 12 : hour % 12;
+                setState(() {
+                  _timeController.text = '$displayHour:$minute $period';
+                });
+              }
+            },
+            child: AbsorbPointer(
+              child: TextField(
+                controller: _timeController,
+                readOnly: true,
+                decoration: InputDecoration(
+                  hintText: 'Tap to select departure time...',
+                  prefixIcon: const Icon(Icons.access_time_rounded, color: AppColors.primaryNavy),
+                  suffixIcon: const Icon(Icons.schedule_rounded, color: AppColors.textSecondary, size: 18),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: AppColors.borderLight)),
+                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.primaryNavy)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                ),
+              ),
             ),
           ),
 
@@ -1235,7 +1450,7 @@ class _AssignRoutesScreenState extends State<AssignRoutesScreen> {
               backgroundColor: Colors.white,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
               child: Container(
-                width: 600,
+                constraints: const BoxConstraints(maxWidth: 600),
                 padding: const EdgeInsets.all(24),
                 child: Form(
                   key: formKey,
@@ -1379,66 +1594,187 @@ class _AssignRoutesScreenState extends State<AssignRoutesScreen> {
                         ),
                         const SizedBox(height: 16),
 
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _buildDialogTextField(
-                                label: 'Bus ID / Number',
-                                controller: busController,
-                                icon: Icons.directions_bus_outlined,
-                                validator: (val) => val == null || val.trim().isEmpty ? 'Required' : null,
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: _buildDialogTextField(
-                                label: 'Departure Time',
-                                controller: timeController,
-                                icon: Icons.access_time_rounded,
-                                validator: (val) => val == null || val.trim().isEmpty ? 'Required' : null,
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: StreamBuilder<Map<String, String>>(
-                                stream: firebaseService.getGenderConfigs(),
-                                builder: (context, snapshot) {
-                                  final categories = snapshot.data?.keys.toList() ?? ['Combined', 'Boys Special', 'Girls Special'];
-                                  if (!categories.contains(selectedType)) {
-                                    selectedType = categories.first;
+                        Builder(
+                          builder: (context) {
+                            final isMobile = MediaQuery.of(context).size.width < 650;
+                            
+                            final busField = Builder(
+                              builder: (context) {
+                                final busesList = Provider.of<BusesViewModel>(context).buses;
+                                bool hasCurrentValue = false;
+                                if (busController.text.isNotEmpty) {
+                                  for (var bus in busesList) {
+                                    if (bus['busNumber'].toString() == busController.text) {
+                                      hasCurrentValue = true;
+                                      break;
+                                    }
                                   }
-                                  return Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      const Text(
-                                        'Service Category',
-                                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.primaryNavy),
+                                }
+                                
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text('Bus ID / Number', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.primaryNavy)),
+                                    const SizedBox(height: 6),
+                                    DropdownButtonFormField<String>(
+                                      value: busController.text.isNotEmpty ? busController.text : null,
+                                      decoration: InputDecoration(
+                                        hintText: 'Select Bus',
+                                        prefixIcon: const Icon(Icons.directions_bus_outlined, color: AppColors.textSecondary, size: 18),
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: AppColors.borderLight)),
                                       ),
-                                      const SizedBox(height: 6),
-                                      DropdownButtonFormField<String>(
-                                        value: selectedType,
-                                        decoration: InputDecoration(
-                                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                      items: [
+                                        if (busController.text.isNotEmpty && !hasCurrentValue)
+                                          DropdownMenuItem(value: busController.text, child: Text("Current: ${busController.text}")),
+                                        ...busesList.map((bus) {
+                                          final busNumber = bus['busNumber'].toString();
+                                          return DropdownMenuItem(value: busNumber, child: Text('Bus $busNumber'));
+                                        }),
+                                      ],
+                                      onChanged: (val) {
+                                        if (val != null) setDialogState(() => busController.text = val);
+                                      },
+                                      validator: (val) => val == null || val.trim().isEmpty ? 'Required' : null,
+                                    ),
+                                  ],
+                                );
+                              }
+                            );
+                            
+                            final timeField = Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Departure Time',
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.primaryNavy),
+                                ),
+                                const SizedBox(height: 6),
+                                GestureDetector(
+                                  onTap: () async {
+                                    TimeOfDay initialTime = TimeOfDay.now();
+                                    final existing = timeController.text.trim();
+                                    if (existing.isNotEmpty && existing != 'TBA' && existing != 'Live') {
+                                      try {
+                                        final parts = existing.replaceAll('AM', '').replaceAll('PM', '').trim().split(':');
+                                        int hour = int.parse(parts[0]);
+                                        int minute = int.parse(parts[1].trim());
+                                        if (existing.contains('PM') && hour != 12) hour += 12;
+                                        if (existing.contains('AM') && hour == 12) hour = 0;
+                                        initialTime = TimeOfDay(hour: hour, minute: minute);
+                                      } catch (_) {}
+                                    }
+                                    final picked = await showTimePicker(
+                                      context: context,
+                                      initialTime: initialTime,
+                                      builder: (context, child) => Theme(
+                                        data: Theme.of(context).copyWith(
+                                          colorScheme: const ColorScheme.light(
+                                            primary: AppColors.primaryNavy,
+                                            onPrimary: Colors.white,
+                                            surface: Colors.white,
+                                            onSurface: AppColors.textDark,
+                                          ),
                                         ),
-                                        items: categories.map((val) => DropdownMenuItem(
-                                          value: val,
-                                          child: Text(val, style: const TextStyle(fontSize: 13)),
-                                        )).toList(),
-                                        onChanged: (val) {
-                                          if (val != null) {
-                                            setDialogState(() {
-                                              selectedType = val;
-                                            });
-                                          }
-                                        },
+                                        child: child!,
                                       ),
-                                    ],
-                                  );
-                                },
-                              ),
-                            ),
-                          ],
+                                    );
+                                    if (picked != null) {
+                                      final hour = picked.hour;
+                                      final minute = picked.minute.toString().padLeft(2, '0');
+                                      final period = hour >= 12 ? 'PM' : 'AM';
+                                      final displayHour = hour % 12 == 0 ? 12 : hour % 12;
+                                      setDialogState(() {
+                                        timeController.text = '$displayHour:$minute $period';
+                                      });
+                                    }
+                                  },
+                                  child: AbsorbPointer(
+                                    child: TextFormField(
+                                      controller: timeController,
+                                      readOnly: true,
+                                      decoration: InputDecoration(
+                                        hintText: 'Tap to select time...',
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                        prefixIcon: const Icon(Icons.access_time_rounded, color: AppColors.primaryNavy, size: 18),
+                                        suffixIcon: const Icon(Icons.schedule_rounded, color: AppColors.textSecondary, size: 16),
+                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.borderLight)),
+                                      ),
+                                      validator: (val) => val == null || val.trim().isEmpty ? 'Required' : null,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            );
+                            
+                            final categoryField = StreamBuilder<Map<String, String>>(
+                              stream: firebaseService.getGenderConfigs(),
+                              builder: (context, snapshot) {
+                                final categories = snapshot.data?.keys.toList() ?? ['Combined', 'Boys Special', 'Girls Special'];
+                                if (!categories.contains(selectedType)) {
+                                  selectedType = categories.first;
+                                }
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Service Category',
+                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.primaryNavy),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    DropdownButtonFormField<String>(
+                                      value: selectedType,
+                                      isExpanded: true,
+                                      decoration: InputDecoration(
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.borderLight)),
+                                      ),
+                                      items: categories.map((val) => DropdownMenuItem(
+                                        value: val,
+                                        child: Text(
+                                          val,
+                                          style: const TextStyle(fontSize: 13),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      )).toList(),
+                                      onChanged: (val) {
+                                        if (val != null) {
+                                          setDialogState(() {
+                                            selectedType = val;
+                                          });
+                                        }
+                                      },
+                                    ),
+                                  ],
+                                );
+                              },
+                            );
+
+                            if (isMobile) {
+                              return Column(
+                                children: [
+                                  busField,
+                                  const SizedBox(height: 16),
+                                  timeField,
+                                  const SizedBox(height: 16),
+                                  categoryField,
+                                ],
+                              );
+                            } else {
+                              return Row(
+                                children: [
+                                  Expanded(child: busField),
+                                  const SizedBox(width: 16),
+                                  Expanded(child: timeField),
+                                  const SizedBox(width: 16),
+                                  Expanded(child: categoryField),
+                                ],
+                              );
+                            }
+                          },
                         ),
                         const SizedBox(height: 16),
 
@@ -1477,7 +1813,13 @@ class _AssignRoutesScreenState extends State<AssignRoutesScreen> {
                                           child: d.profileUrl == null ? Text(d.name.isNotEmpty ? d.name[0] : 'D', style: const TextStyle(fontSize: 10, color: AppColors.primaryNavy)) : null,
                                         ),
                                         const SizedBox(width: 8),
-                                        Text(d.name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                                        Expanded(
+                                          child: Text(
+                                            d.name,
+                                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
                                       ]),
                                     )),
                                   ],

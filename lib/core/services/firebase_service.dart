@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -11,6 +12,7 @@ import 'package:unitransit_admin/models/hub_model.dart';
 import 'package:unitransit_admin/models/stop_model.dart';
 import 'package:unitransit_admin/models/support_ticket_model.dart';
 import 'package:unitransit_admin/models/faq_model.dart';
+import 'package:unitransit_admin/models/audit_log_model.dart';
 
 class FirebaseService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -30,14 +32,13 @@ class FirebaseService {
           options: Firebase.app().options,
         );
       }
-      
-      final credential = await FirebaseAuth.instanceFor(app: secondaryApp).createUserWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-      
+
+      final credential = await FirebaseAuth.instanceFor(
+        app: secondaryApp,
+      ).createUserWithEmailAndPassword(email: email, password: password);
+
       final uid = credential.user!.uid;
-      
+
       // Delete the secondary app instance to clean up
       await secondaryApp.delete();
       return uid;
@@ -75,12 +76,19 @@ class FirebaseService {
       'status': driver.status,
       'createdAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
+    await logActivity(action: 'Added Driver', target: 'Driver: ${driver.name}');
   }
 
   Stream<List<DriverModel>> getDrivers() {
-    return _db.collection('drivers').orderBy('createdAt', descending: true).snapshots().map((snapshot) {
-      return snapshot.docs.map((doc) => DriverModel.fromMap(doc.data())).toList();
-    });
+    return _db
+        .collection('drivers')
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) {
+          return snapshot.docs
+              .map((doc) => DriverModel.fromMap(doc.data()))
+              .toList();
+        });
   }
 
   Future<void> updateDriver(DriverModel driver) async {
@@ -103,12 +111,24 @@ class FirebaseService {
         'status': driver.status,
       }, SetOptions(merge: true));
     }
+    await logActivity(
+      action: 'Updated Driver',
+      target: 'Driver: ${driver.name}',
+    );
   }
 
   Future<void> deleteDriver(String id) async {
     // Note: In a real app, also delete images from storage
-    await _db.collection('drivers').doc(id).delete();
-    await _db.collection('users').doc(id).delete();
+    try {
+      final doc = await _db.collection('drivers').doc(id).get();
+      final name = doc.data()?['name'] ?? id;
+      await _db.collection('drivers').doc(id).delete();
+      await _db.collection('users').doc(id).delete();
+      await logActivity(action: 'Deleted Driver', target: 'Driver: $name');
+    } catch (e) {
+      await _db.collection('drivers').doc(id).delete();
+      await _db.collection('users').doc(id).delete();
+    }
   }
 
   Future<void> resetDriverPassword(String email) async {
@@ -122,15 +142,29 @@ class FirebaseService {
   // Students
   Future<void> addStudent(StudentModel student) async {
     await _db.collection('users').doc(student.id).set(student.toMap());
-    await _db.collection('students').doc(student.id).set(student.toMap(), SetOptions(merge: true));
+    await _db
+        .collection('students')
+        .doc(student.id)
+        .set(student.toMap(), SetOptions(merge: true));
+    await logActivity(
+      action: 'Added Student',
+      target: 'Student: ${student.name}',
+    );
   }
 
   Stream<List<StudentModel>> getStudents() {
-    return _db.collection('users').where('role', isEqualTo: 'Student').snapshots().map((snapshot) {
-      final students = snapshot.docs.map((doc) => StudentModel.fromMap(doc.data(), docId: doc.id)).toList();
-      students.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      return students;
-    });
+    return _db
+        .collection('users')
+        .where('role', isEqualTo: 'Student')
+        .snapshots()
+        .map((snapshot) {
+          final students =
+              snapshot.docs
+                  .map((doc) => StudentModel.fromMap(doc.data(), docId: doc.id))
+                  .toList();
+          students.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          return students;
+        });
   }
 
   Future<void> updateStudent(StudentModel student) async {
@@ -138,25 +172,37 @@ class FirebaseService {
     try {
       await _db.collection('students').doc(student.id).update(student.toMap());
     } catch (_) {
-      await _db.collection('students').doc(student.id).set(student.toMap(), SetOptions(merge: true));
+      await _db
+          .collection('students')
+          .doc(student.id)
+          .set(student.toMap(), SetOptions(merge: true));
     }
   }
 
   Future<void> deleteStudent(String id) async {
-    await _db.collection('users').doc(id).delete();
+    try {
+      final doc = await _db.collection('users').doc(id).get();
+      final name = doc.data()?['name'] ?? id;
+      await _db.collection('users').doc(id).delete();
+      await logActivity(action: 'Deleted Student', target: 'Student: $name');
+    } catch (e) {
+      await _db.collection('users').doc(id).delete();
+    }
   }
 
   // Routes & Schedules
   Stream<List<BusSchedule>> getBusSchedules() {
     return _db.collection('schedules').snapshots().map((snapshot) {
-      return snapshot.docs.map((doc) => BusSchedule.fromMap(doc.id, doc.data())).toList();
+      return snapshot.docs
+          .map((doc) => BusSchedule.fromMap(doc.id, doc.data()))
+          .toList();
     });
   }
 
   Future<void> addBusSchedule(BusSchedule schedule) async {
     // 1. Save to Firestore (Detailed Info)
     await _db.collection('schedules').doc(schedule.id).set(schedule.toMap());
-    
+
     // 2. Save to Realtime Database (Dropdown Info for Student App)
     await _rtdb.ref('official_routes').child(schedule.route).set({
       'from': schedule.from,
@@ -164,7 +210,7 @@ class FirebaseService {
     });
   }
 
-  Future<void> deleteBusSchedule(String id, String routeName) async {
+  Future<void> deleteBusSchedule(String id, String routeName, {bool forceDeleteRoute = false}) async {
     // 0. Clean up driver assignment
     try {
       final scheduleDoc = await _db.collection('schedules').doc(id).get();
@@ -173,9 +219,11 @@ class FirebaseService {
         if (driverId != null && driverId.toString().isNotEmpty) {
           final driverDoc = await _db.collection('drivers').doc(driverId).get();
           if (driverDoc.exists) {
-            final assignedRoutes = List<String>.from(driverDoc.data()?['assignedRoutes'] ?? []);
+            final assignedRoutes = List<String>.from(
+              driverDoc.data()?['assignedRoutes'] ?? [],
+            );
             assignedRoutes.remove(id);
-            
+
             // Recompute bus numbers for this driver
             final busNumbers = <String>{};
             for (final sid in assignedRoutes) {
@@ -185,7 +233,7 @@ class FirebaseService {
                 if (bn.toString().isNotEmpty && bn != 'TBA') busNumbers.add(bn);
               }
             }
-            
+
             await _db.collection('drivers').doc(driverId).update({
               'assignedRoutes': assignedRoutes,
               'assignedBus': busNumbers.join(', '),
@@ -197,16 +245,59 @@ class FirebaseService {
       print("Error cleaning up driver assignment on schedule delete: $e");
     }
 
-    // 1. Delete from Firestore
-    await _db.collection('schedules').doc(id).delete();
-    
-    // Check if there are any other schedules with the same route
-    final query = await _db.collection('schedules').where('route', isEqualTo: routeName).limit(1).get();
-    if (query.docs.isEmpty) {
-      // 2. Delete from Realtime Database only if no other schedule uses it
+    if (forceDeleteRoute) {
+      // 1. Delete from Firestore
+      await _db.collection('schedules').doc(id).delete();
+
+      // 2. Delete from Realtime Database
       await _rtdb.ref('official_routes').child(routeName).remove();
-      // 3. Delete Polyline if exists
+      
+      // 3. Delete custom polylines
       await _rtdb.ref('custom_polylines').child(routeName).remove();
+      
+      // 4. Delete stops associated with this route
+      final stopsSnapshot = await _rtdb.ref('stops').get();
+      if (stopsSnapshot.exists && stopsSnapshot.value is Map) {
+        final stopsData = stopsSnapshot.value as Map;
+        stopsData.forEach((key, value) async {
+          if (value is Map && value['route'] == routeName) {
+            await _rtdb.ref('stops').child(key).remove();
+          }
+        });
+      }
+    } else {
+      // Fetch the schedule first to inspect if it is a Master Route template
+      try {
+        final scheduleDoc = await _db.collection('schedules').doc(id).get();
+        if (scheduleDoc.exists) {
+          final data = scheduleDoc.data() ?? {};
+          final date = data['date'] as String?;
+          final operatingDays = data['operatingDays'] as List?;
+          
+          final isMasterRoute = (date == null || date.trim().isEmpty) &&
+                                (operatingDays == null || operatingDays.isEmpty);
+          
+          if (isMasterRoute) {
+            // It is a Master Route template! DO NOT delete the document.
+            // Just clear its assignment details so the route template remains in the system.
+            await _db.collection('schedules').doc(id).update({
+              'busNumber': 'TBA',
+              'departureTime': 'TBA',
+              'assignedDriverId': null,
+              'assignedDriverName': null,
+              'assignedConductorName': null,
+            });
+          } else {
+            // It is a specific date daily assignment instance.
+            // It is safe to delete it entirely from Firestore.
+            await _db.collection('schedules').doc(id).delete();
+          }
+        }
+      } catch (e) {
+        print("Error checking schedule type in deleteBusSchedule: $e");
+        // Fallback: safe delete if there are other schedules
+        await _db.collection('schedules').doc(id).delete();
+      }
     }
   }
 
@@ -218,11 +309,12 @@ class FirebaseService {
   Future<void> updateHub(HubModel hub, String oldName) async {
     if (hub.name != oldName) {
       await _rtdb.ref('hubs').child(oldName).remove();
-      
+
       // Optional: Update all routes that use this hub name
       final routesData = await _rtdb.ref('official_routes').get();
       if (routesData.exists) {
-        final Map<dynamic, dynamic> routes = routesData.value as Map<dynamic, dynamic>;
+        final Map<dynamic, dynamic> routes =
+            routesData.value as Map<dynamic, dynamic>;
         routes.forEach((key, value) async {
           final Map<dynamic, dynamic> route = value as Map<dynamic, dynamic>;
           bool changed = false;
@@ -235,7 +327,10 @@ class FirebaseService {
             changed = true;
           }
           if (changed) {
-            await _rtdb.ref('official_routes').child(key).update(Map<String, dynamic>.from(route));
+            await _rtdb
+                .ref('official_routes')
+                .child(key)
+                .update(Map<String, dynamic>.from(route));
           }
         });
       }
@@ -249,7 +344,10 @@ class FirebaseService {
       if (data is! Map) return [];
       return data.entries.map((e) {
         final val = e.value;
-        return HubModel.fromMap(e.key.toString(), val is Map ? Map<dynamic, dynamic>.from(val) : {});
+        return HubModel.fromMap(
+          e.key.toString(),
+          val is Map ? Map<dynamic, dynamic>.from(val) : {},
+        );
       }).toList();
     });
   }
@@ -282,12 +380,19 @@ class FirebaseService {
       if (data is! Map) return [];
       return data.entries.map((e) {
         final val = e.value;
-        return StopModel.fromMap(e.key.toString(), val is Map ? Map<dynamic, dynamic>.from(val) : {});
+        return StopModel.fromMap(
+          e.key.toString(),
+          val is Map ? Map<dynamic, dynamic>.from(val) : {},
+        );
       }).toList();
     });
   }
 
-  Future<void> updateBusSchedule(String id, BusSchedule schedule, String oldRouteName) async {
+  Future<void> updateBusSchedule(
+    String id,
+    BusSchedule schedule,
+    String oldRouteName,
+  ) async {
     // 1. Update Firestore
     await _db.collection('schedules').doc(id).update(schedule.toMap());
 
@@ -295,9 +400,13 @@ class FirebaseService {
     if (schedule.route != oldRouteName) {
       await _rtdb.ref('official_routes').child(oldRouteName).remove();
       // Also move polyline if exists
-      final polylineData = await _rtdb.ref('custom_polylines').child(oldRouteName).get();
+      final polylineData =
+          await _rtdb.ref('custom_polylines').child(oldRouteName).get();
       if (polylineData.exists) {
-        await _rtdb.ref('custom_polylines').child(schedule.route).set(polylineData.value);
+        await _rtdb
+            .ref('custom_polylines')
+            .child(schedule.route)
+            .set(polylineData.value);
         await _rtdb.ref('custom_polylines').child(oldRouteName).remove();
       }
     }
@@ -320,63 +429,112 @@ class FirebaseService {
   Stream<Map<String, dynamic>> getStatsStream() {
     return getRealTimeStats();
   }
-  
-  // Better version: combine two streams
+
   Stream<Map<String, dynamic>> getRealTimeStats() {
-    final driversStream = _db.collection('drivers').snapshots();
-    
-    return driversStream.asyncMap((driversSnapshot) async {
-      // 1. Students count
-      final studentsSnapshot = await _db.collection('users').where('role', isEqualTo: 'Student').get();
-      
-      // 2. Active Trips & Total Revenue
-      final completedTripsSnapshot = await _db.collection('completed_trips').get();
-      double revenue = 0.0;
-      int activeCount = 0;
-      
-      for (var doc in completedTripsSnapshot.docs) {
-        final data = doc.data();
-        final amount = data['revenue'] ?? data['fare'] ?? data['amount'] ?? data['totalPrice'] ?? data['price'] ?? 0;
-        revenue += (amount is num ? amount.toDouble() : 0.0);
-        
-        final status = data['status']?.toString().toLowerCase();
-        if (status == 'active' || status == 'in_progress' || status == 'ongoing' || data['isActive'] == true) {
-          activeCount++;
-        }
+    late StreamController<Map<String, dynamic>> controller;
+    StreamSubscription? driverSub;
+    StreamSubscription? studentSub;
+    StreamSubscription? tripsSub;
+
+    int drivers = 0;
+    int students = 0;
+    int activeTripsCount = 0;
+    double revenue = 0.0;
+
+    void updateStats() {
+      if (!controller.isClosed) {
+        controller.add({
+          'totalDrivers': drivers,
+          'totalStudents': students,
+          'activeTrips': activeTripsCount,
+          'totalRevenue': revenue,
+        });
       }
-      
-      if (activeCount == 0) {
-        try {
-          final activeTripsSnapshot = await _db.collection('active_trips').get();
-          activeCount += activeTripsSnapshot.docs.length;
-        } catch (_) {}
-        if (activeCount == 0) {
-          try {
-            final tripsSnapshot = await _db.collection('trips').where('status', isEqualTo: 'active').get();
-            activeCount += tripsSnapshot.docs.length;
-          } catch (_) {}
-        }
-      }
-      
-      return {
-        'totalDrivers': driversSnapshot.docs.length,
-        'totalStudents': studentsSnapshot.docs.length,
-        'activeTrips': activeCount,
-        'totalRevenue': revenue,
-      };
-    });
+    }
+
+    controller = StreamController<Map<String, dynamic>>.broadcast(
+      onListen: () {
+        driverSub = _db.collection('drivers').snapshots().listen((snap) {
+          drivers = snap.docs.length;
+          updateStats();
+        });
+
+        studentSub = _db
+            .collection('users')
+            .where('role', isEqualTo: 'Student')
+            .snapshots()
+            .listen((snap) {
+              students = snap.docs.length;
+              updateStats();
+            });
+
+        tripsSub = _db.collection('completed_trips').snapshots().listen((
+          snap,
+        ) async {
+          double tempRevenue = 0.0;
+          int tempActive = 0;
+          for (var doc in snap.docs) {
+            final data = doc.data();
+            final amount =
+                data['revenue'] ??
+                data['fare'] ??
+                data['amount'] ??
+                data['totalPrice'] ??
+                data['price'] ??
+                0;
+            tempRevenue += (amount is num ? amount.toDouble() : 0.0);
+
+            final status = data['status']?.toString().toLowerCase();
+            if (status == 'active' ||
+                status == 'in_progress' ||
+                status == 'ongoing' ||
+                data['isActive'] == true) {
+              tempActive++;
+            }
+          }
+
+          if (tempActive == 0) {
+            try {
+              final activeTripsSnapshot =
+                  await _db.collection('active_trips').get();
+              tempActive += activeTripsSnapshot.docs.length;
+            } catch (_) {}
+            if (tempActive == 0) {
+              try {
+                final tripsSnapshot =
+                    await _db
+                        .collection('trips')
+                        .where('status', isEqualTo: 'active')
+                        .get();
+                tempActive += tripsSnapshot.docs.length;
+              } catch (_) {}
+            }
+          }
+
+          revenue = tempRevenue;
+          activeTripsCount = tempActive;
+          updateStats();
+        });
+      },
+      onCancel: () {
+        driverSub?.cancel();
+        studentSub?.cancel();
+        tripsSub?.cancel();
+      },
+    );
+
+    return controller.stream;
   }
 
   Future<int> getAdminsCount() async {
-    final snapshot = await _db.collection('users').where('role', isEqualTo: 'Admin').get();
+    final snapshot =
+        await _db.collection('users').where('role', isEqualTo: 'Admin').get();
     return snapshot.docs.length;
   }
 
   // Gender Configuration (RTDB)
   Future<void> updateGenderConfig(String name, String colorHex) async {
-    await _rtdb.ref('gender_configs').child(name).set({
-      'color': colorHex,
-    });
+    await _rtdb.ref('gender_configs').child(name).set({'color': colorHex});
   }
 
   Future<void> deleteGenderConfig(String name) async {
@@ -387,7 +545,7 @@ class FirebaseService {
     return _rtdb.ref('gender_configs').onValue.map((event) {
       final data = event.snapshot.value;
       if (data is! Map) return {};
-      
+
       final Map<String, String> result = {};
       data.forEach((key, value) {
         if (value is Map) {
@@ -408,37 +566,40 @@ class FirebaseService {
         .orderBy('timestamp', descending: true)
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs
-          .map((doc) => SupportTicketModel.fromMap(doc.id, doc.data()))
-          .toList();
-    });
+          return snapshot.docs
+              .map((doc) => SupportTicketModel.fromMap(doc.id, doc.data()))
+              .toList();
+        });
   }
 
-  Future<void> updateTicketStatus(String ticketId, String status, {String? reply}) async {
-    final Map<String, dynamic> updates = {
-      'status': status,
-      'adminRead': true,
-    };
+  Future<void> updateTicketStatus(
+    String ticketId,
+    String status, {
+    String? reply,
+  }) async {
+    final Map<String, dynamic> updates = {'status': status, 'adminRead': true};
     if (reply != null) {
       updates['adminReply'] = reply;
       updates['userRead'] = false;
     }
-    if (status.toLowerCase() == 'resolved' || status.toLowerCase() == 'closed') {
+    if (status.toLowerCase() == 'resolved' ||
+        status.toLowerCase() == 'closed') {
       updates['resolvedAt'] = Timestamp.now();
     }
-    
+
     // Update the ticket
     await _db.collection('support_tickets').doc(ticketId).update(updates);
 
     // If a reply is provided, write a real-time notification to the user's notifications collection
     if (reply != null && reply.trim().isNotEmpty) {
       try {
-        final docSnapshot = await _db.collection('support_tickets').doc(ticketId).get();
+        final docSnapshot =
+            await _db.collection('support_tickets').doc(ticketId).get();
         if (docSnapshot.exists) {
           final data = docSnapshot.data();
           final String? userId = data?['userId'];
           final String? userRole = data?['userRole'];
-          
+
           if (userId != null && userId.isNotEmpty) {
             final notificationData = {
               'title': 'Support Ticket Update',
@@ -448,10 +609,14 @@ class FirebaseService {
               'isRead': false,
               'targetRole': userRole ?? 'Student',
             };
-            
+
             // Write to user private notifications subcollection
-            await _db.collection('users').doc(userId).collection('notifications').add(notificationData);
-            
+            await _db
+                .collection('users')
+                .doc(userId)
+                .collection('notifications')
+                .add(notificationData);
+
             // Write to global notifications trigger collection for FCM / functions triggers
             await _db.collection('notifications').add({
               ...notificationData,
@@ -491,13 +656,22 @@ class FirebaseService {
     final doc = await _db.collection('app_settings').doc('about').get();
     if (!doc.exists) {
       await _db.collection('app_settings').doc('about').set({
-        'vision': "UniTransit is a state-of-the-art solution designed for The Islamia University of Bahawalpur to digitize the bus tracking experience. It leverages real-time GPS data, Firebase synchronization, and smart routing algorithms to ensure students never miss their commute.",
+        'vision':
+            "UniTransit is a state-of-the-art solution designed for The Islamia University of Bahawalpur to digitize the bus tracking experience. It leverages real-time GPS data, Firebase synchronization, and smart routing algorithms to ensure students never miss their commute.",
         'version': "1.2.0 (Stable)",
         'university': "The Islamia University of Bahawalpur",
         'appLogoUrl': "", // Add image URL here later from Admin Panel
         'contributors': [
-          {"role": "Lead Developer", "name": "Noor Mustafa", "subtitle": "Roll No: F22BDOCS1M01160"},
-          {"role": "Supervisor", "name": "Dr. Umar Farooq Shafi", "subtitle": "Department of CS & IT, IUB"},
+          {
+            "role": "Lead Developer",
+            "name": "Noor Mustafa",
+            "subtitle": "Roll No: F22BDOCS1M01160",
+          },
+          {
+            "role": "Supervisor",
+            "name": "Dr. Umar Farooq Shafi",
+            "subtitle": "Department of CS & IT, IUB",
+          },
         ],
       });
     }
@@ -506,7 +680,9 @@ class FirebaseService {
   // FAQs
   Stream<List<FaqModel>> getFaqs() {
     return _db.collection('faqs').orderBy('order').snapshots().map((snapshot) {
-      return snapshot.docs.map((doc) => FaqModel.fromMap(doc.id, doc.data())).toList();
+      return snapshot.docs
+          .map((doc) => FaqModel.fromMap(doc.id, doc.data()))
+          .toList();
     });
   }
 
@@ -536,7 +712,7 @@ class FirebaseService {
     Map<String, dynamic>? extraData,
   }) async {
     final timestamp = Timestamp.now();
-    
+
     // 1. Save to user private notifications subcollection
     final payload = {
       'title': title,
@@ -547,9 +723,13 @@ class FirebaseService {
       if (imageUrl != null) 'imageUrl': imageUrl,
       if (extraData != null) ...extraData,
     };
-    
-    await _db.collection('users').doc(userId).collection('notifications').add(payload);
-    
+
+    await _db
+        .collection('users')
+        .doc(userId)
+        .collection('notifications')
+        .add(payload);
+
     // 2. Log in global admin_notifications for tracking
     await _db.collection('admin_notifications').add({
       'title': title,
@@ -571,7 +751,7 @@ class FirebaseService {
     String? imageUrl,
   }) async {
     final timestamp = Timestamp.now();
-    
+
     // 1. Save to global admin_notifications collection
     final newAlert = {
       'title': title,
@@ -582,7 +762,7 @@ class FirebaseService {
       if (imageUrl != null) 'imageUrl': imageUrl,
     };
     await _db.collection('admin_notifications').add(newAlert);
-    
+
     // 2. Fetch users based on targetAudience
     Query query = _db.collection('users');
     if (targetAudience == 'Students') {
@@ -590,19 +770,20 @@ class FirebaseService {
     } else if (targetAudience == 'Drivers') {
       query = query.where('role', isEqualTo: 'Driver');
     }
-    
+
     final usersSnapshot = await query.get();
     if (usersSnapshot.docs.isNotEmpty) {
       WriteBatch batch = _db.batch();
       int operationCount = 0;
-      
+
       for (var doc in usersSnapshot.docs) {
-        final notificationRef = _db
-            .collection('users')
-            .doc(doc.id)
-            .collection('notifications')
-            .doc();
-            
+        final notificationRef =
+            _db
+                .collection('users')
+                .doc(doc.id)
+                .collection('notifications')
+                .doc();
+
         batch.set(notificationRef, {
           'title': title,
           'message': message,
@@ -611,7 +792,7 @@ class FirebaseService {
           'isRead': false,
           if (imageUrl != null) 'imageUrl': imageUrl,
         });
-        
+
         operationCount++;
         // Firestore batch limit is 500
         if (operationCount >= 450) {
@@ -620,7 +801,7 @@ class FirebaseService {
           operationCount = 0;
         }
       }
-      
+
       if (operationCount > 0) {
         await batch.commit();
       }
@@ -634,33 +815,39 @@ class FirebaseService {
         .orderBy('timestamp', descending: true)
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs.map((doc) {
-        final data = doc.data();
-        return {
-          'id': doc.id,
-          'title': data['title'] ?? '',
-          'message': data['message'] ?? '',
-          'targetAudience': data['targetAudience'] ?? 'All',
-          'type': data['type'] ?? 'info',
-          'imageUrl': data['imageUrl'],
-          'timestamp': (data['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now(),
-        };
-      }).toList();
-    });
+          return snapshot.docs.map((doc) {
+            final data = doc.data();
+            return {
+              'id': doc.id,
+              'title': data['title'] ?? '',
+              'message': data['message'] ?? '',
+              'targetAudience': data['targetAudience'] ?? 'All',
+              'type': data['type'] ?? 'info',
+              'imageUrl': data['imageUrl'],
+              'timestamp':
+                  (data['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now(),
+            };
+          }).toList();
+        });
   }
 
   // Fetch all users eligible for receiving notifications (Students and Drivers)
   Future<List<Map<String, dynamic>>> getAllNotificationUsers() async {
     final snapshot = await _db.collection('users').get();
-    return snapshot.docs.where((doc) {
-      final role = (doc.data()['role'] ?? '').toString().toLowerCase();
-      return role == 'student' || role == 'driver';
-    }).map((doc) => {
-      'uid': doc.id,
-      'name': doc.data()['name'] ?? 'Unnamed',
-      'email': doc.data()['email'] ?? '',
-      'role': doc.data()['role'] ?? 'Student',
-    }).toList();
+    return snapshot.docs
+        .where((doc) {
+          final role = (doc.data()['role'] ?? '').toString().toLowerCase();
+          return role == 'student' || role == 'driver';
+        })
+        .map(
+          (doc) => {
+            'uid': doc.id,
+            'name': doc.data()['name'] ?? 'Unnamed',
+            'email': doc.data()['email'] ?? '',
+            'role': doc.data()['role'] ?? 'Student',
+          },
+        )
+        .toList();
   }
 
   // Emergency Alerts (RTDB)
@@ -668,7 +855,7 @@ class FirebaseService {
     return _rtdb.ref('emergency_alerts').onValue.map((event) {
       final data = event.snapshot.value;
       if (data is! Map) return [];
-      
+
       final List<Map<String, dynamic>> alerts = [];
       data.forEach((key, value) {
         if (value is Map) {
@@ -677,19 +864,23 @@ class FirebaseService {
           alerts.add(alert);
         }
       });
-      
+
       // Sort by timestamp descending
       alerts.sort((a, b) {
         final aTime = a['timestamp'] ?? 0;
         final bTime = b['timestamp'] ?? 0;
         return bTime.compareTo(aTime);
       });
-      
+
       return alerts;
     });
   }
 
-  Future<void> resolveEmergencyAlert(String id, {String? notes, String? resolvedBy}) async {
+  Future<void> resolveEmergencyAlert(
+    String id, {
+    String? notes,
+    String? resolvedBy,
+  }) async {
     try {
       final alertSnapshot = await _rtdb.ref('emergency_alerts').child(id).get();
       if (alertSnapshot.exists) {
@@ -699,7 +890,8 @@ class FirebaseService {
           await sendUserNotification(
             userId: userId,
             title: 'SOS Alert Resolved 🟢',
-            message: 'Admin resolved your SOS: "${notes ?? 'Incident Handled'}". Please rate our assistance.',
+            message:
+                'Admin resolved your SOS: "${notes ?? 'Incident Handled'}". Please rate our assistance.',
             type: 'sos_resolved',
             extraData: {
               'alertId': id,
@@ -761,5 +953,47 @@ class FirebaseService {
       return {};
     });
   }
-}
 
+  // Audit Logs
+  Future<void> logActivity({
+    required String action,
+    required String target,
+    String? details,
+  }) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+
+      final adminDoc = await _db.collection('users').doc(user.uid).get();
+      final adminName =
+          adminDoc.data()?['name'] ??
+          user.displayName ??
+          user.email ??
+          'Unknown Admin';
+
+      await _db.collection('audit_logs').add({
+        'adminId': user.uid,
+        'adminName': adminName,
+        'action': action,
+        'target': target,
+        'timestamp': FieldValue.serverTimestamp(),
+        'details': details,
+      });
+    } catch (e) {
+      print("Failed to log activity: $e");
+    }
+  }
+
+  Stream<List<AuditLogModel>> getAuditLogs() {
+    return _db
+        .collection('audit_logs')
+        .orderBy('timestamp', descending: true)
+        .limit(200)
+        .snapshots()
+        .map((snapshot) {
+          return snapshot.docs
+              .map((doc) => AuditLogModel.fromFirestore(doc))
+              .toList();
+        });
+  }
+}
