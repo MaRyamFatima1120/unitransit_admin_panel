@@ -777,17 +777,21 @@ class _MapPreviewSectionState extends State<MapPreviewSection> {
                         stream: firebaseService.getBusSchedules(),
                         builder: (context, snapshot) {
                           final routes = snapshot.data ?? [];
-                          if (routes.isEmpty) return const SizedBox.shrink();
+                          final uniqueRouteNames = routes.map((r) => r.route).toSet().toList();
 
-                          final routeNames = routes.map((r) => r.route).toList();
-                          if (_selectedRoute != null && !routeNames.contains(_selectedRoute)) {
+                          if (_selectedRoute != null && !uniqueRouteNames.contains(_selectedRoute)) {
                             SchedulerBinding.instance.addPostFrameCallback((_) {
-                              if (mounted) setState(() => _selectedRoute = routes.isNotEmpty ? routes.first.route : null);
+                              if (mounted) setState(() => _selectedRoute = uniqueRouteNames.isNotEmpty ? uniqueRouteNames.first : null);
                             });
-                          } else if (_selectedRoute == null && routes.isNotEmpty) {
+                          } else if (_selectedRoute == null && uniqueRouteNames.isNotEmpty) {
                             SchedulerBinding.instance.addPostFrameCallback((_) {
-                              if (mounted) setState(() => _selectedRoute = routes.first.route);
+                              if (mounted) setState(() => _selectedRoute = uniqueRouteNames.first);
                             });
+                          }
+
+                          String? safeValue = _selectedRoute;
+                          if (safeValue != null && !uniqueRouteNames.contains(safeValue)) {
+                            safeValue = null;
                           }
 
                           return Container(
@@ -799,11 +803,11 @@ class _MapPreviewSectionState extends State<MapPreviewSection> {
                             ),
                             child: DropdownButtonHideUnderline(
                               child: DropdownButton<String>(
-                                value: _selectedRoute,
+                                value: safeValue,
                                 isExpanded: true,
-                                hint: const Text('Select route', style: TextStyle(fontSize: 13)),
-                                items: routes.map((r) => DropdownMenuItem(value: r.route, child: Text(r.route, style: const TextStyle(fontSize: 13)))).toList(),
-                                onChanged: (v) => setState(() => _selectedRoute = v),
+                                hint: Text(uniqueRouteNames.isEmpty ? 'No routes' : 'Select route', style: const TextStyle(fontSize: 13)),
+                                items: uniqueRouteNames.map((name) => DropdownMenuItem(value: name, child: Text(name, style: const TextStyle(fontSize: 13)))).toList(),
+                                onChanged: uniqueRouteNames.isEmpty ? null : (v) => setState(() => _selectedRoute = v),
                                 icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
                               ),
                             ),
@@ -830,17 +834,21 @@ class _MapPreviewSectionState extends State<MapPreviewSection> {
                         stream: firebaseService.getBusSchedules(),
                         builder: (context, snapshot) {
                           final routes = snapshot.data ?? [];
-                          if (routes.isEmpty) return const SizedBox.shrink();
+                          final uniqueRouteNames = routes.map((r) => r.route).toSet().toList();
 
-                          final routeNames = routes.map((r) => r.route).toList();
-                          if (_selectedRoute != null && !routeNames.contains(_selectedRoute)) {
+                          if (_selectedRoute != null && !uniqueRouteNames.contains(_selectedRoute)) {
                             SchedulerBinding.instance.addPostFrameCallback((_) {
-                              if (mounted) setState(() => _selectedRoute = routes.isNotEmpty ? routes.first.route : null);
+                              if (mounted) setState(() => _selectedRoute = uniqueRouteNames.isNotEmpty ? uniqueRouteNames.first : null);
                             });
-                          } else if (_selectedRoute == null && routes.isNotEmpty) {
+                          } else if (_selectedRoute == null && uniqueRouteNames.isNotEmpty) {
                             SchedulerBinding.instance.addPostFrameCallback((_) {
-                              if (mounted) setState(() => _selectedRoute = routes.first.route);
+                              if (mounted) setState(() => _selectedRoute = uniqueRouteNames.first);
                             });
+                          }
+
+                          String? safeValue = _selectedRoute;
+                          if (safeValue != null && !uniqueRouteNames.contains(safeValue)) {
+                            safeValue = null;
                           }
 
                           return Container(
@@ -851,10 +859,10 @@ class _MapPreviewSectionState extends State<MapPreviewSection> {
                             ),
                             child: DropdownButtonHideUnderline(
                               child: DropdownButton<String>(
-                                value: _selectedRoute,
-                                hint: const Text('Select route', style: TextStyle(fontSize: 13)),
-                                items: routes.map((r) => DropdownMenuItem(value: r.route, child: Text(r.route, style: const TextStyle(fontSize: 13)))).toList(),
-                                onChanged: (v) => setState(() => _selectedRoute = v),
+                                value: safeValue,
+                                hint: Text(uniqueRouteNames.isEmpty ? 'No routes' : 'Select route', style: const TextStyle(fontSize: 13)),
+                                items: uniqueRouteNames.map((name) => DropdownMenuItem(value: name, child: Text(name, style: const TextStyle(fontSize: 13)))).toList(),
+                                onChanged: uniqueRouteNames.isEmpty ? null : (v) => setState(() => _selectedRoute = v),
                                 icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
                               ),
                             ),
@@ -886,19 +894,22 @@ class _MapPreviewSectionState extends State<MapPreviewSection> {
                         ],
                       ),
                     )
-                  : StreamBuilder<List<HubModel>>(
-                      stream: firebaseService.getHubs(),
-                      builder: (context, hubSnapshot) {
-                        return StreamBuilder<List<StopModel>>(
-                          stream: firebaseService.getStops(),
-                          builder: (context, stopSnapshot) {
-                            return StreamBuilder<Map<String, dynamic>>(
-                              stream: firebaseService.getPolylinesStatus(),
-                              builder: (context, polylineSnapshot) {
-                                final hubs = hubSnapshot.data ?? [];
-                                final allStops = stopSnapshot.data ?? [];
-                                final routeStops = allStops.where((s) => s.route == _selectedRoute).toList();
-                                final polylineData = polylineSnapshot.data ?? {};
+                  : StreamBuilder<List<BusSchedule>>(
+                      stream: firebaseService.getBusSchedules(),
+                      builder: (context, routeSnapshot) {
+                        return StreamBuilder<List<HubModel>>(
+                          stream: firebaseService.getHubs(),
+                          builder: (context, hubSnapshot) {
+                            return StreamBuilder<List<StopModel>>(
+                              stream: firebaseService.getStops(),
+                              builder: (context, stopSnapshot) {
+                                return StreamBuilder<Map<String, dynamic>>(
+                                  stream: firebaseService.getPolylinesStatus(),
+                                  builder: (context, polylineSnapshot) {
+                                    final hubs = hubSnapshot.data ?? [];
+                                    final allStops = stopSnapshot.data ?? [];
+                                    final routeStops = allStops.where((s) => s.route == _selectedRoute).toList();
+                                    final polylineData = polylineSnapshot.data ?? {};
 
                                 // Parse polyline coordinates for selected route
                                 List<LatLng> polylineLatLngs = [];
@@ -920,9 +931,20 @@ class _MapPreviewSectionState extends State<MapPreviewSection> {
                                 }
 
                                 // Trigger fit camera once when route changes or loaded
-                                if (_selectedRoute != _lastFittedRoute && (hubs.isNotEmpty || routeStops.isNotEmpty || polylineLatLngs.isNotEmpty)) {
+                                // Only use hubs that match this route's from/to
+                                final selectedScheduleForFit = (routeSnapshot.data ?? [])
+                                    .where((r) => r.route == _selectedRoute)
+                                    .firstOrNull;
+                                final fromHubName = selectedScheduleForFit?.from.trim().toLowerCase() ?? '';
+                                final toHubName = selectedScheduleForFit?.to.trim().toLowerCase() ?? '';
+                                final routeHubs = hubs.where((h) {
+                                  final n = h.name.trim().toLowerCase();
+                                  return n == fromHubName || n == toHubName;
+                                }).toList();
+
+                                if (_selectedRoute != _lastFittedRoute && (routeHubs.isNotEmpty || routeStops.isNotEmpty || polylineLatLngs.isNotEmpty)) {
                                   _lastFittedRoute = _selectedRoute;
-                                  _fitAllPoints(hubs, routeStops, polylineLatLngs);
+                                  _fitAllPoints(routeHubs, routeStops, polylineLatLngs);
                                 }
 
                                 if (hubs.isEmpty && routeStops.isEmpty && polylineLatLngs.isEmpty) {
@@ -997,55 +1019,63 @@ class _MapPreviewSectionState extends State<MapPreviewSection> {
                                                 ),
                                               );
                                             }),
-                                            // Hubs markers
-                                            ...hubs.map((hub) {
-                                              Color markerColor = AppColors.accentAmber;
-                                              if (_selectedRoute != null) {
-                                                final cleanRoute = _selectedRoute!.replaceAll('➔', '->').replaceAll('to', '->');
-                                                final hubNameLower = hub.name.toLowerCase();
-                                                if (cleanRoute.toLowerCase().contains(hubNameLower)) {
-                                                  final routeParts = cleanRoute.split(RegExp(r'->|➔|to'));
-                                                  if (routeParts.length >= 2) {
-                                                    if (routeParts.first.toLowerCase().contains(hubNameLower)) {
-                                                      markerColor = Colors.green; // Start
-                                                    } else if (routeParts.last.toLowerCase().contains(hubNameLower)) {
-                                                      markerColor = Colors.red; // End
-                                                    }
-                                                  }
-                                                }
-                                              }
+                                         // Hubs markers — only for selected route
+                                            ...() {
+                                              if (_selectedRoute == null) return <Marker>[];
 
-                                              return Marker(
-                                                point: LatLng(hub.latitude, hub.longitude),
-                                                width: 120,
-                                                height: 65,
-                                                child: Column(
-                                                  mainAxisSize: MainAxisSize.min,
-                                                  children: [
-                                                    Container(
-                                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                                      decoration: BoxDecoration(
-                                                        color: markerColor,
-                                                        borderRadius: BorderRadius.circular(12),
-                                                        boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4)],
-                                                      ),
-                                                      child: Text(
-                                                        hub.name,
-                                                        style: TextStyle(
-                                                          fontSize: 10,
-                                                          fontWeight: FontWeight.bold,
-                                                          color: markerColor == AppColors.accentAmber ? AppColors.primaryNavy : Colors.white,
+                                              // Find the schedule to get exact from/to hub names
+                                              final selectedScheduleObj = (routeSnapshot.data ?? [])
+                                                  .where((r) => r.route == _selectedRoute)
+                                                  .firstOrNull;
+
+                                              final fromHub = selectedScheduleObj?.from.trim().toLowerCase() ?? '';
+                                              final toHub = selectedScheduleObj?.to.trim().toLowerCase() ?? '';
+
+                                              return hubs.where((hub) {
+                                                final n = hub.name.trim().toLowerCase();
+                                                return n == fromHub || n == toHub;
+                                              }).map((hub) {
+                                                final hubNameLower = hub.name.trim().toLowerCase();
+                                                final isStart = hubNameLower == fromHub;
+                                                final markerColor = isStart ? Colors.green : Colors.red;
+
+                                                return Marker(
+                                                  point: LatLng(hub.latitude, hub.longitude),
+                                                  width: 130,
+                                                  height: 70,
+                                                  child: Column(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      Container(
+                                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                                        decoration: BoxDecoration(
+                                                          color: markerColor,
+                                                          borderRadius: BorderRadius.circular(12),
+                                                          boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 6)],
                                                         ),
-                                                        maxLines: 1,
-                                                        overflow: TextOverflow.ellipsis,
+                                                        child: Row(
+                                                          mainAxisSize: MainAxisSize.min,
+                                                          children: [
+                                                            Icon(isStart ? Icons.trip_origin : Icons.location_on, color: Colors.white, size: 12),
+                                                            const SizedBox(width: 4),
+                                                            Flexible(
+                                                              child: Text(
+                                                                hub.name,
+                                                                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
+                                                                maxLines: 1,
+                                                                overflow: TextOverflow.ellipsis,
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ),
                                                       ),
-                                                    ),
-                                                    const SizedBox(height: 2),
-                                                    Icon(Icons.location_on, color: markerColor, size: 28),
-                                                  ],
-                                                ),
-                                              );
-                                            }),
+                                                      const SizedBox(height: 2),
+                                                      Icon(Icons.location_on, color: markerColor, size: 30),
+                                                    ],
+                                                  ),
+                                                );
+                                              }).toList();
+                                            }(),
                                           ],
                                         ),
                                       ],
@@ -1168,11 +1198,13 @@ class _MapPreviewSectionState extends State<MapPreviewSection> {
                                   ],
                                 );
                               },
-                            );
-                          },
-                        );
-                      },
-                    ),
+                              );
+                            },
+                          );
+                        },
+                      );
+                    },
+                  ),
             ),
           ),
         ],

@@ -110,7 +110,7 @@ class LoginScreen extends StatelessWidget {
                 children: [
                   ClipRRect(
                     borderRadius: BorderRadius.circular(20),
-                    child: Image.asset(AppAssets.unitransitLogo, size: 100, fit: BoxFit.contain),
+                    child: Image.asset(AppAssets.unitransitLogo, width: 150, height: 150, fit: BoxFit.contain),
                   ),
                   const SizedBox(height: 24),
                   const Text('Uni-Transit', style: TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
@@ -150,7 +150,7 @@ class LoginScreen extends StatelessWidget {
                         decoration: BoxDecoration(color: Colors.white.withOpacity(0.1), borderRadius: BorderRadius.circular(24)),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(16),
-                          child: Image.asset(AppAssets.unitransitLogo, size: 100, fit: BoxFit.contain),
+                          child: Image.asset(AppAssets.unitransitLogo, width: 150, height: 150, fit: BoxFit.contain),
                         ),
                       ),
                       const SizedBox(height: 32),
@@ -185,7 +185,7 @@ class LoginScreen extends StatelessWidget {
             const SizedBox(height: 60),
             ClipRRect(
               borderRadius: BorderRadius.circular(16),
-              child: Image.asset(AppAssets.unitransitLogo, size: 80, fit: BoxFit.contain),
+              child: Image.asset(AppAssets.unitransitLogo, width: 120, height: 120, fit: BoxFit.contain),
             ),
             const SizedBox(height: 24),
             GestureDetector(

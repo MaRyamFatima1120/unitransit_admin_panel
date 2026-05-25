@@ -18,14 +18,17 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
   final ScrollController _horizontalScrollController = ScrollController();
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _calendarScrollController = ScrollController();
-  String _selectedTab = 'All';
-  String _searchQuery = '';
-  DateTime? _selectedDate;
+  
+  // Use ValueNotifiers for granular rebuilds
+  final ValueNotifier<String> _selectedTabNotifier = ValueNotifier('All');
+  final ValueNotifier<String> _searchQueryNotifier = ValueNotifier('');
+  final ValueNotifier<DateTime?> _selectedDateNotifier = ValueNotifier(null);
   late DateTime _currentMonth;
 
   @override
   void initState() {
     super.initState();
+    _selectedDateNotifier.value = DateTime.now();
     _currentMonth = DateTime(DateTime.now().year, DateTime.now().month);
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToSelectedDate());
   }
@@ -35,6 +38,9 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
     _horizontalScrollController.dispose();
     _searchController.dispose();
     _calendarScrollController.dispose();
+    _selectedTabNotifier.dispose();
+    _searchQueryNotifier.dispose();
+    _selectedDateNotifier.dispose();
     super.dispose();
   }
 
@@ -63,39 +69,6 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
                 final activeTripsCount = allTrips.where((t) => t['status'] == 'active').length;
                 final completedTripsCount = allTrips.where((t) => t['status'] == 'completed').length;
 
-                // Filter logic
-                var filteredTrips = allTrips;
-                if (_selectedTab == 'Active') {
-                  filteredTrips = filteredTrips.where((t) => t['status'] == 'active').toList();
-                } else if (_selectedTab == 'Completed') {
-                  filteredTrips = filteredTrips.where((t) => t['status'] == 'completed').toList();
-                }
-
-                // Date Filter
-                if (_selectedDate != null) {
-                  filteredTrips = filteredTrips.where((t) {
-                    final startTimeVal = t['startTime'];
-                    if (startTimeVal == null) return false;
-                    final date = DateTime.fromMillisecondsSinceEpoch(startTimeVal);
-                    return date.year == _selectedDate!.year &&
-                        date.month == _selectedDate!.month &&
-                        date.day == _selectedDate!.day;
-                  }).toList();
-                }
-
-                if (_searchQuery.isNotEmpty) {
-                  filteredTrips = filteredTrips.where((t) {
-                    final bus = (t['busNumber'] ?? '').toString().toLowerCase();
-                    final plate = (t['plateNumber'] ?? '').toString().toLowerCase();
-                    final from = (t['from'] ?? '').toString().toLowerCase();
-                    final to = (t['to'] ?? '').toString().toLowerCase();
-                    return bus.contains(_searchQuery.toLowerCase()) ||
-                        plate.contains(_searchQuery.toLowerCase()) ||
-                        from.contains(_searchQuery.toLowerCase()) ||
-                        to.contains(_searchQuery.toLowerCase());
-                  }).toList();
-                }
-
                 return Container(
                   width: double.infinity,
                   decoration: BoxDecoration(
@@ -108,29 +81,78 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
                       _buildHorizontalCalendar(),
                       _buildToolbar(context),
                       Expanded(
-                        child: filteredTrips.isEmpty
-                            ? FadeInSlide(
-                                direction: FadeInDirection.bottomToTop,
-                                child: Center(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(Icons.history_rounded, size: 64, color: Colors.grey.shade300),
-                                      const SizedBox(height: 16),
-                                      Text(
-                                        'No trips found',
-                                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey.shade600),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        'Trips started by drivers will appear here in real-time.',
-                                        style: TextStyle(fontSize: 13, color: Colors.grey.shade400),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              )
-                            : _buildTripsTable(context, filteredTrips),
+                        child: ValueListenableBuilder<String>(
+                          valueListenable: _selectedTabNotifier,
+                          builder: (context, selectedTab, _) {
+                            return ValueListenableBuilder<DateTime?>(
+                              valueListenable: _selectedDateNotifier,
+                              builder: (context, selectedDate, _) {
+                                return ValueListenableBuilder<String>(
+                                  valueListenable: _searchQueryNotifier,
+                                  builder: (context, searchQuery, _) {
+                                    // Filter logic moved inside builders
+                                    var filteredTrips = allTrips;
+                                    if (selectedTab == 'Active') {
+                                      filteredTrips = filteredTrips.where((t) => t['status'] == 'active').toList();
+                                    } else if (selectedTab == 'Completed') {
+                                      filteredTrips = filteredTrips.where((t) => t['status'] == 'completed').toList();
+                                    }
+
+                                    // Date Filter
+                                    if (selectedDate != null) {
+                                      filteredTrips = filteredTrips.where((t) {
+                                        final startTimeVal = t['startTime'];
+                                        if (startTimeVal == null) return false;
+                                        final date = DateTime.fromMillisecondsSinceEpoch(startTimeVal);
+                                        return date.year == selectedDate.year &&
+                                            date.month == selectedDate.month &&
+                                            date.day == selectedDate.day;
+                                      }).toList();
+                                    }
+
+                                    if (searchQuery.isNotEmpty) {
+                                      filteredTrips = filteredTrips.where((t) {
+                                        final bus = (t['busNumber'] ?? '').toString().toLowerCase();
+                                        final plate = (t['plateNumber'] ?? '').toString().toLowerCase();
+                                        final from = (t['from'] ?? '').toString().toLowerCase();
+                                        final to = (t['to'] ?? '').toString().toLowerCase();
+                                        return bus.contains(searchQuery.toLowerCase()) ||
+                                            plate.contains(searchQuery.toLowerCase()) ||
+                                            from.contains(searchQuery.toLowerCase()) ||
+                                            to.contains(searchQuery.toLowerCase());
+                                      }).toList();
+                                    }
+
+                                    if (filteredTrips.isEmpty) {
+                                      return FadeInSlide(
+                                        direction: FadeInDirection.bottomToTop,
+                                        child: Center(
+                                          child: Column(
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            children: [
+                                              Icon(Icons.history_rounded, size: 64, color: Colors.grey.shade300),
+                                              const SizedBox(height: 16),
+                                              Text(
+                                                'No trips found',
+                                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey.shade600),
+                                              ),
+                                              const SizedBox(height: 8),
+                                              Text(
+                                                'Trips started by drivers will appear here in real-time.',
+                                                style: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                    return _buildTripsTable(context, filteredTrips);
+                                  },
+                                );
+                              },
+                            );
+                          },
+                        ),
                       ),
                     ],
                   ),
@@ -333,16 +355,17 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
                           ),
                         ],
                       ),
-                      if (_selectedDate != null)
-                        TextButton.icon(
-                          onPressed: () {
-                            setState(() {
-                              _selectedDate = null;
-                            });
-                          },
-                          icon: const Icon(Icons.clear_all_rounded, size: 16, color: Colors.redAccent),
-                          label: Text('Clear Filter', style: GoogleFonts.poppins(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.bold)),
-                        )
+                      ValueListenableBuilder<DateTime?>(
+                        valueListenable: _selectedDateNotifier,
+                        builder: (context, selectedDate, _) {
+                          if (selectedDate == null) return const SizedBox.shrink();
+                          return TextButton.icon(
+                            onPressed: () => _selectedDateNotifier.value = null,
+                            icon: const Icon(Icons.clear_all_rounded, size: 16, color: Colors.redAccent),
+                            label: Text('Clear Filter', style: GoogleFonts.poppins(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.bold)),
+                          );
+                        },
+                      ),
                     ],
                   ),
                 ),
@@ -373,93 +396,96 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
             // Horizontal Calendar Dates Scroll
             SizedBox(
               height: 90,
-              child: ListView.builder(
-                controller: _calendarScrollController,
-                scrollDirection: Axis.horizontal,
-                itemCount: days.length,
-                itemBuilder: (context, index) {
-                  final date = days[index];
-                  final isSelected = _selectedDate != null &&
-                      date.year == _selectedDate!.year &&
-                      date.month == _selectedDate!.month &&
-                      date.day == _selectedDate!.day;
-                  final isToday = date.year == DateTime.now().year &&
-                      date.month == DateTime.now().month &&
-                      date.day == DateTime.now().day;
-                  final dayOfWeek = _getWeekdayName(date).substring(0, 3);
+              child: ValueListenableBuilder<DateTime?>(
+                valueListenable: _selectedDateNotifier,
+                builder: (context, selectedDate, _) {
+                  return ListView.builder(
+                    controller: _calendarScrollController,
+                    scrollDirection: Axis.horizontal,
+                    itemCount: days.length,
+                    itemBuilder: (context, index) {
+                      final date = days[index];
+                      final isSelected = selectedDate != null &&
+                          date.year == selectedDate.year &&
+                          date.month == selectedDate.month &&
+                          date.day == selectedDate.day;
+                      final isToday = date.year == DateTime.now().year &&
+                          date.month == DateTime.now().month &&
+                          date.day == DateTime.now().day;
+                      final dayOfWeek = _getWeekdayName(date).substring(0, 3);
 
-                  return GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        if (isSelected) {
-                          _selectedDate = null;
-                        } else {
-                          _selectedDate = date;
-                        }
-                      });
-                    },
-                    child: Container(
-                      width: 62,
-                      margin: const EdgeInsets.only(right: 10),
-                      decoration: BoxDecoration(
-                        gradient: isSelected
-                            ? const LinearGradient(
-                                colors: [AppColors.primaryNavy, Color(0xFF303F9F)],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              )
-                            : null,
-                        color: isSelected ? null : (isToday ? AppColors.primaryNavy.withValues(alpha: 0.06) : Colors.transparent),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: isSelected
-                              ? Colors.transparent
-                              : (isToday ? AppColors.primaryNavy.withValues(alpha: 0.3) : AppColors.borderLight),
-                          width: isToday ? 1.5 : 1,
-                        ),
-                        boxShadow: isSelected
-                            ? [
-                                BoxShadow(
-                                  color: AppColors.primaryNavy.withValues(alpha: 0.3),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 4),
-                                )
-                              ]
-                            : null,
-                      ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            dayOfWeek.toUpperCase(),
-                            style: GoogleFonts.poppins(
-                              fontSize: 11,
-                              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                              color: isSelected ? Colors.white.withValues(alpha: 0.8) : AppColors.textSecondary,
+                      return GestureDetector(
+                        onTap: () {
+                          if (isSelected) {
+                            _selectedDateNotifier.value = null;
+                          } else {
+                            _selectedDateNotifier.value = date;
+                          }
+                        },
+                        child: Container(
+                          width: 62,
+                          margin: const EdgeInsets.only(right: 10),
+                          decoration: BoxDecoration(
+                            gradient: isSelected
+                                ? const LinearGradient(
+                                    colors: [AppColors.primaryNavy, Color(0xFF303F9F)],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  )
+                                : null,
+                            color: isSelected ? null : (isToday ? AppColors.primaryNavy.withValues(alpha: 0.06) : Colors.transparent),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: isSelected
+                                  ? Colors.transparent
+                                  : (isToday ? AppColors.primaryNavy.withValues(alpha: 0.3) : AppColors.borderLight),
+                              width: isToday ? 1.5 : 1,
                             ),
+                            boxShadow: isSelected
+                                ? [
+                                    BoxShadow(
+                                      color: AppColors.primaryNavy.withValues(alpha: 0.3),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 4),
+                                    )
+                                  ]
+                                : null,
                           ),
-                          const SizedBox(height: 6),
-                          Text(
-                            date.day.toString(),
-                            style: GoogleFonts.poppins(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: isSelected ? Colors.white : AppColors.textDark,
-                            ),
-                          ),
-                          if (isToday && !isSelected)
-                            Container(
-                              margin: const EdgeInsets.only(top: 4),
-                              width: 5,
-                              height: 5,
-                              decoration: const BoxDecoration(
-                                color: AppColors.primaryNavy,
-                                shape: BoxShape.circle,
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                dayOfWeek.toUpperCase(),
+                                style: GoogleFonts.poppins(
+                                  fontSize: 11,
+                                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                                  color: isSelected ? Colors.white.withValues(alpha: 0.8) : AppColors.textSecondary,
+                                ),
                               ),
-                            ),
-                        ],
-                      ),
-                    ),
+                              const SizedBox(height: 6),
+                              Text(
+                                date.day.toString(),
+                                style: GoogleFonts.poppins(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: isSelected ? Colors.white : AppColors.textDark,
+                                ),
+                              ),
+                              if (isToday && !isSelected)
+                                Container(
+                                  margin: const EdgeInsets.only(top: 4),
+                                  width: 5,
+                                  height: 5,
+                                  decoration: const BoxDecoration(
+                                    color: AppColors.primaryNavy,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
                   );
                 },
               ),
@@ -501,7 +527,7 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
 
   void _scrollToSelectedDate() {
     if (_calendarScrollController.hasClients) {
-      final index = (_selectedDate ?? DateTime.now()).day - 1;
+      final index = (_selectedDateNotifier.value ?? DateTime.now()).day - 1;
       _calendarScrollController.animateTo(
         index * 72.0,
         duration: const Duration(milliseconds: 300),
@@ -524,27 +550,28 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
                 children: [
                   Row(
                     children: ['All', 'Active', 'Completed'].map((tab) {
-                      final isSelected = _selectedTab == tab;
                       return Padding(
                         padding: const EdgeInsets.only(right: 8.0),
-                        child: ChoiceChip(
-                          label: Text(tab),
-                          selected: isSelected,
-                          selectedColor: AppColors.primaryNavy,
-                          labelStyle: TextStyle(
-                            color: isSelected ? Colors.white : AppColors.textSecondary,
-                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                            fontSize: 12,
-                          ),
-                          backgroundColor: Colors.transparent,
-                          side: BorderSide(color: isSelected ? AppColors.primaryNavy : AppColors.borderLight),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          onSelected: (val) {
-                            if (val) {
-                              setState(() {
-                                _selectedTab = tab;
-                              });
-                            }
+                        child: ValueListenableBuilder<String>(
+                          valueListenable: _selectedTabNotifier,
+                          builder: (context, selectedTab, _) {
+                            final isSelected = selectedTab == tab;
+                            return ChoiceChip(
+                              label: Text(tab),
+                              selected: isSelected,
+                              selectedColor: AppColors.primaryNavy,
+                              labelStyle: TextStyle(
+                                color: isSelected ? Colors.white : AppColors.textSecondary,
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                fontSize: 12,
+                              ),
+                              backgroundColor: Colors.transparent,
+                              side: BorderSide(color: isSelected ? AppColors.primaryNavy : AppColors.borderLight),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              onSelected: (val) {
+                                if (val) _selectedTabNotifier.value = tab;
+                              },
+                            );
                           },
                         ),
                       );
@@ -560,26 +587,27 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
                   // Filter Tabs
                   Row(
                     children: ['All', 'Active', 'Completed'].map((tab) {
-                      final isSelected = _selectedTab == tab;
                       return Padding(
                         padding: const EdgeInsets.only(right: 8.0),
-                        child: ChoiceChip(
-                          label: Text(tab),
-                          selected: isSelected,
-                          selectedColor: AppColors.primaryNavy,
-                          labelStyle: TextStyle(
-                            color: isSelected ? Colors.white : AppColors.textSecondary,
-                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                          ),
-                          backgroundColor: Colors.transparent,
-                          side: BorderSide(color: isSelected ? AppColors.primaryNavy : AppColors.borderLight),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          onSelected: (val) {
-                            if (val) {
-                              setState(() {
-                                _selectedTab = tab;
-                              });
-                            }
+                        child: ValueListenableBuilder<String>(
+                          valueListenable: _selectedTabNotifier,
+                          builder: (context, selectedTab, _) {
+                            final isSelected = selectedTab == tab;
+                            return ChoiceChip(
+                              label: Text(tab),
+                              selected: isSelected,
+                              selectedColor: AppColors.primaryNavy,
+                              labelStyle: TextStyle(
+                                color: isSelected ? Colors.white : AppColors.textSecondary,
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                              ),
+                              backgroundColor: Colors.transparent,
+                              side: BorderSide(color: isSelected ? AppColors.primaryNavy : AppColors.borderLight),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              onSelected: (val) {
+                                if (val) _selectedTabNotifier.value = tab;
+                              },
+                            );
                           },
                         ),
                       );
@@ -603,11 +631,7 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
       height: 40,
       child: TextField(
         controller: _searchController,
-        onChanged: (val) {
-          setState(() {
-            _searchQuery = val;
-          });
-        },
+        onChanged: (val) => _searchQueryNotifier.value = val,
         decoration: InputDecoration(
           hintText: 'Search by Bus / Route...',
           hintStyle: const TextStyle(fontSize: 13, color: AppColors.textSecondary),

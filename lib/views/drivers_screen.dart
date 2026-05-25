@@ -119,7 +119,6 @@ class _DriversScreenState extends State<DriversScreen> {
   }
 
   Widget _buildToolbar(BuildContext context) {
-    final viewModel = context.watch<DriversViewModel>();
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -129,8 +128,12 @@ class _DriversScreenState extends State<DriversScreen> {
             delay: const Duration(milliseconds: 300),
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
-              child: Row(
-                children: _tabs.map((tab) => _buildTab(tab, viewModel)).toList(),
+              child: Consumer<DriversViewModel>(
+                builder: (context, viewModel, _) {
+                  return Row(
+                    children: _tabs.map((tab) => _buildTab(tab, viewModel)).toList(),
+                  );
+                },
               ),
             ),
           ),
@@ -153,7 +156,7 @@ class _DriversScreenState extends State<DriversScreen> {
                       delay: const Duration(milliseconds: 400),
                       child: SizedBox(
                         width: double.infinity,
-                        child: _buildAddDriverButton(context, viewModel),
+                        child: _buildAddDriverButton(context),
                       ),
                     ),
                   ],
@@ -172,7 +175,7 @@ class _DriversScreenState extends State<DriversScreen> {
                     FadeInSlide(
                       direction: FadeInDirection.rightToLeft,
                       delay: const Duration(milliseconds: 400),
-                      child: _buildAddDriverButton(context, viewModel),
+                      child: _buildAddDriverButton(context),
                     ),
                   ],
                 ),
@@ -192,8 +195,6 @@ class _DriversScreenState extends State<DriversScreen> {
 
   Widget _buildDriversTable(BuildContext context) {
     final firebaseService = context.read<FirebaseService>();
-    final viewModel = context.watch<DriversViewModel>();
-    final dashboardViewModel = context.watch<DashboardViewModel>();
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -235,40 +236,44 @@ class _DriversScreenState extends State<DriversScreen> {
                                 return const SizedBox(height: 300, child: Center(child: Text('No drivers found.', style: TextStyle(color: Colors.grey))));
                               }
 
-                              var drivers = snapshot.data!;
-                              if (viewModel.selectedTab != 'All') {
-                                drivers = drivers.where((d) {
-                                  if (viewModel.selectedTab == 'Available') return d.status == 'Online' || d.status == 'Available';
-                                  if (viewModel.selectedTab == 'un-Available') return d.status == 'Offline' || d.status == 'Busy';
-                                  if (viewModel.selectedTab == 'Verified') return d.isVerified;
-                                  if (viewModel.selectedTab == 'Non-Verified') return !d.isVerified;
-                                  return true;
-                                }).toList();
-                              }
+                              return Consumer2<DriversViewModel, DashboardViewModel>(
+                                builder: (context, driversVM, dashVM, _) {
+                                  var drivers = snapshot.data!;
+                                  if (driversVM.selectedTab != 'All') {
+                                    drivers = drivers.where((d) {
+                                      if (driversVM.selectedTab == 'Available') return d.status == 'Online' || d.status == 'Available';
+                                      if (driversVM.selectedTab == 'un-Available') return d.status == 'Offline' || d.status == 'Busy';
+                                      if (driversVM.selectedTab == 'Verified') return d.isVerified;
+                                      if (driversVM.selectedTab == 'Non-Verified') return !d.isVerified;
+                                      return true;
+                                    }).toList();
+                                  }
 
-                              final searchQuery = dashboardViewModel.searchQuery;
-                              if (searchQuery.isNotEmpty) {
-                                drivers = drivers.where((d) =>
-                                  d.name.toLowerCase().contains(searchQuery.toLowerCase()) ||
-                                  d.email.toLowerCase().contains(searchQuery.toLowerCase()) ||
-                                  d.phoneNumber.contains(searchQuery)).toList();
-                              }
+                                  final searchQuery = dashVM.searchQuery;
+                                  if (searchQuery.isNotEmpty) {
+                                    drivers = drivers.where((d) =>
+                                      d.name.toLowerCase().contains(searchQuery.toLowerCase()) ||
+                                      d.email.toLowerCase().contains(searchQuery.toLowerCase()) ||
+                                      d.phoneNumber.contains(searchQuery)).toList();
+                                  }
 
-                              return ListView.separated(
-                                shrinkWrap: true,
-                                physics: const NeverScrollableScrollPhysics(),
-                                padding: EdgeInsets.zero,
-                                itemCount: drivers.length,
-                                separatorBuilder: (context, index) => Divider(height: 1, color: Colors.grey.shade100),
-                                itemBuilder: (context, index) => _DriverRow(
-                                  driver: drivers[index], 
-                                  viewModel: viewModel, 
-                                  allSchedules: allSchedules,
-                                  onEdit: (d) => _showEditDriverDialog(context, viewModel, d),
-                                  onNotify: (d) => _showSendNotificationDialog(context, d.id, d.name),
-                                  onDelete: (d) => _showDeleteConfirmation(context, viewModel, d),
-                                  onMiniDocTap: (url) => _showMiniDocDialog(context, url),
-                                ),
+                                  return ListView.separated(
+                                    shrinkWrap: true,
+                                    physics: const NeverScrollableScrollPhysics(),
+                                    padding: EdgeInsets.zero,
+                                    itemCount: drivers.length,
+                                    separatorBuilder: (context, index) => Divider(height: 1, color: Colors.grey.shade100),
+                                    itemBuilder: (context, index) => _DriverRow(
+                                      driver: drivers[index], 
+                                      viewModel: driversVM, 
+                                      allSchedules: allSchedules,
+                                      onEdit: (d) => _showEditDriverDialog(context, driversVM, d),
+                                      onNotify: (d) => _showSendNotificationDialog(context, d.id, d.name),
+                                      onDelete: (d) => _showDeleteConfirmation(context, driversVM, d),
+                                      onMiniDocTap: (url) => _showMiniDocDialog(context, url),
+                                    ),
+                                  );
+                                },
                               );
                             },
                           );
@@ -1009,9 +1014,9 @@ class _DriversScreenState extends State<DriversScreen> {
 
 
   
-  Widget _buildAddDriverButton(BuildContext context, DriversViewModel viewModel) {
+  Widget _buildAddDriverButton(BuildContext context) {
     return ElevatedButton.icon(
-      onPressed: () => _showAddDriverDialog(context, viewModel),
+      onPressed: () => _showAddDriverDialog(context, context.read<DriversViewModel>()),
       icon: const Icon(Icons.add, size: 18),
       label: const Text('Add Driver'),
       style: ElevatedButton.styleFrom(

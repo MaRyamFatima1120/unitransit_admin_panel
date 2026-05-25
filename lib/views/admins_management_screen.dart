@@ -320,6 +320,8 @@ class _AdminsManagementScreenState extends State<AdminsManagementScreen> {
     final nameController = TextEditingController();
     final emailController = TextEditingController();
     final passwordController = TextEditingController();
+    String selectedSubRole = 'Fleet Manager';
+    final List<String> roles = ['Fleet Manager', 'Support Admin', 'System Monitor'];
 
     showDialog(
       context: context,
@@ -342,9 +344,10 @@ class _AdminsManagementScreenState extends State<AdminsManagementScreen> {
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'A new administrative account will be created and registered in the system.',
+                    'A new administrative account will be created with specific role permissions.',
                     style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
                   ),
                   const SizedBox(height: 24),
@@ -353,6 +356,25 @@ class _AdminsManagementScreenState extends State<AdminsManagementScreen> {
                   _buildDialogField(emailController, 'Email Address', Icons.email_outlined, TextInputAction.next, isEmail: true),
                   const SizedBox(height: 16),
                   _buildDialogField(passwordController, 'Temporary Password', Icons.lock_outline_rounded, TextInputAction.done, isPassword: true),
+                  const SizedBox(height: 24),
+                  const Text('ASSIGN ROLE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1, color: AppColors.textSecondary)),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: AppColors.backgroundLight.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: selectedSubRole,
+                        isExpanded: true,
+                        icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                        onChanged: (v) => setDialogState(() => selectedSubRole = v!),
+                        items: roles.map((r) => DropdownMenuItem(value: r, child: Text(r, style: const TextStyle(fontSize: 14)))).toList(),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -370,7 +392,7 @@ class _AdminsManagementScreenState extends State<AdminsManagementScreen> {
                   
                   setDialogState(() => _isCreating = true);
                   try {
-                    await _createAdmin(context, nameController.text, emailController.text, passwordController.text);
+                    await _createAdmin(context, nameController.text, emailController.text, passwordController.text, selectedSubRole);
                     if (context.mounted) Navigator.pop(context);
                   } catch (e) {
                     if (context.mounted) {
@@ -421,8 +443,8 @@ class _AdminsManagementScreenState extends State<AdminsManagementScreen> {
     );
   }
 
-  Future<void> _createAdmin(BuildContext context, String name, String email, String password) async {
-    final firebaseService = FirebaseService();
+  Future<void> _createAdmin(BuildContext context, String name, String email, String password, String subRole) async {
+    final firebaseService = context.read<FirebaseService>();
     
     // 1. Create in Firebase Auth
     final uid = await firebaseService.createUserAuth(email, password);
@@ -432,9 +454,12 @@ class _AdminsManagementScreenState extends State<AdminsManagementScreen> {
       'name': name,
       'email': email,
       'role': 'Admin',
+      'subRole': subRole,
       'uid': uid,
       'createdAt': FieldValue.serverTimestamp(),
     });
+
+    await firebaseService.logActivity(action: 'Created Admin', target: 'Admin: $name ($subRole)');
   }
 
   void _confirmDelete(BuildContext context, String id, String name) {
@@ -449,7 +474,10 @@ class _AdminsManagementScreenState extends State<AdminsManagementScreen> {
           ElevatedButton(
             onPressed: () async {
               await FirebaseFirestore.instance.collection('users').doc(id).delete();
-              if (context.mounted) Navigator.pop(context);
+              if (context.mounted) {
+                context.read<FirebaseService>().logActivity(action: 'Revoked Admin Access', target: 'Admin: $name');
+                Navigator.pop(context);
+              }
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
             child: const Text('Confirm Remove', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -623,8 +651,17 @@ class _AdminRowState extends State<_AdminRow> {
             children: [
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(color: AppColors.primaryNavy.withValues(alpha: 0.05), borderRadius: BorderRadius.circular(20)),
-                child: const Text('ADMIN', style: TextStyle(color: AppColors.primaryNavy, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                decoration: BoxDecoration(
+                  color: (widget.admin['subRole'] == 'Fleet Manager' ? Colors.blue : (widget.admin['subRole'] == 'Support Admin' ? Colors.orange : Colors.purple)).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  (widget.admin['subRole'] ?? 'ADMIN').toString().toUpperCase(), 
+                  style: TextStyle(
+                    color: widget.admin['subRole'] == 'Fleet Manager' ? Colors.blue : (widget.admin['subRole'] == 'Support Admin' ? Colors.orange : Colors.purple), 
+                    fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5
+                  )
+                ),
               ),
               const SizedBox(width: 8),
               _ActionIconButton(

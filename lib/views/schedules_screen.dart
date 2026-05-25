@@ -8,6 +8,7 @@ import 'package:unitransit_admin/core/services/firebase_service.dart';
 import 'package:unitransit_admin/models/bus_schedule_model.dart';
 import 'package:unitransit_admin/core/utils/responsive_util.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:unitransit_admin/view_models/buses_view_model.dart';
 
 class SchedulesScreen extends StatefulWidget {
   const SchedulesScreen({super.key});
@@ -1075,22 +1076,10 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
                               ),
                             if (AppResponsiveUtil.isMobile(context)) const SizedBox(height: 16) else const SizedBox(width: 16),
                             if (AppResponsiveUtil.isMobile(context))
-                              _buildTextField(
-                                label: 'Bus ID / Number',
-                                controller: busIdController,
-                                icon: Icons.directions_bus_outlined,
-                                hint: 'e.g., 1-30, C1-C6',
-                                validator: (val) => val == null || val.trim().isEmpty ? 'Bus ID required' : null,
-                              )
+                              _buildBusDropdown(context, busIdController, setDialogState)
                             else
                               Expanded(
-                                child: _buildTextField(
-                                  label: 'Bus ID / Number',
-                                  controller: busIdController,
-                                  icon: Icons.directions_bus_outlined,
-                                  hint: 'e.g., 1-30, C1-C6',
-                                  validator: (val) => val == null || val.trim().isEmpty ? 'Bus ID required' : null,
-                                ),
+                                child: _buildBusDropdown(context, busIdController, setDialogState),
                               ),
                             if (AppResponsiveUtil.isMobile(context)) const SizedBox(height: 16) else const SizedBox(width: 16),
                             if (AppResponsiveUtil.isMobile(context))
@@ -1553,6 +1542,67 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
             fillColor: AppColors.backgroundLight.withOpacity(0.5),
           ),
           style: GoogleFonts.poppins(fontSize: 13),
+        ),
+      ],
+    );
+  }
+  Widget _buildBusDropdown(BuildContext context, TextEditingController controller, StateSetter setDialogState) {
+    final busesVm = Provider.of<BusesViewModel>(context, listen: false);
+    final busesList = busesVm.buses;
+
+    // Ensure current value is in the list, otherwise add it as an option (for edit scenarios with missing buses)
+    bool hasCurrentValue = false;
+    if (controller.text.isNotEmpty) {
+      for (var bus in busesList) {
+        if (bus['busNumber'].toString() == controller.text) {
+          hasCurrentValue = true;
+          break;
+        }
+      }
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Assigned Bus',
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.bold,
+            fontSize: 13,
+            color: AppColors.textDark,
+          ),
+        ),
+        const SizedBox(height: 6),
+        DropdownButtonFormField<String>(
+          value: controller.text.isNotEmpty ? controller.text : null,
+          decoration: InputDecoration(
+            hintText: 'Select Bus from Fleet',
+            prefixIcon: const Icon(Icons.directions_bus_outlined, size: 18, color: AppColors.textSecondary),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            filled: true,
+            fillColor: AppColors.backgroundLight.withOpacity(0.5),
+          ),
+          items: [
+            if (controller.text.isNotEmpty && !hasCurrentValue)
+              DropdownMenuItem(value: controller.text, child: Text("Current: ${controller.text}", style: GoogleFonts.poppins(fontSize: 13))),
+            ...busesList.map((bus) {
+              final busNumber = bus['busNumber'].toString();
+              final capacity = bus['capacity'] ?? 0;
+              return DropdownMenuItem(
+                value: busNumber,
+                child: Text('Bus $busNumber ($capacity seats)', style: GoogleFonts.poppins(fontSize: 13)),
+              );
+            }),
+          ],
+          onChanged: (val) {
+            if (val != null) {
+              setDialogState(() {
+                controller.text = val;
+              });
+            }
+          },
+          validator: (val) => val == null || val.trim().isEmpty ? 'Please select a bus' : null,
         ),
       ],
     );

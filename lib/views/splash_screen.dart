@@ -91,18 +91,10 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.1),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: accentColor.withOpacity(0.3), width: 2),
-                      ),
-                      child: Icon(
-                        Icons.directions_bus_rounded,
-                        size: 80,
-                        color: accentColor,
-                      ),
+                    Image.asset(
+                      'assets/images/unitransit_logo.png',
+                      width: 220,
+                      height: 220,
                     ),
                     const SizedBox(height: 24),
                     const Text(
