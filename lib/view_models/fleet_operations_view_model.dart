@@ -168,6 +168,42 @@ class FleetOperationsViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  bool _isRouteMatching(String busFrom, String busTo, String selectedRouteFilter) {
+    if (selectedRouteFilter == 'All') return true;
+    
+    // Split the selected route filter by common route separators
+    final parts = selectedRouteFilter.split(RegExp(r'(➔|->|➔|➔|to)'));
+    if (parts.length < 2) return false;
+    
+    final filterFrom = parts[0].trim().toLowerCase();
+    final filterTo = parts[1].trim().toLowerCase();
+    
+    final bFrom = busFrom.trim().toLowerCase();
+    final bTo = busTo.trim().toLowerCase();
+    
+    // Helper to check if two strings are equivalent (including common abbreviations or spelling errors)
+    bool matchPart(String actual, String filter) {
+      if (actual == filter) return true;
+      if (actual.contains(filter) || filter.contains(actual)) return true;
+      
+      // Handle Baghdad Campus vs Baghdad
+      final normActual = actual.replaceAll('campus', '').trim();
+      final normFilter = filter.replaceAll('campus', '').trim();
+      if (normActual == normFilter) return true;
+      
+      // Handle Abbasia vs Abasia spelling difference
+      final abbasiaSpelling = ['abbasia', 'abasia', 'old'];
+      if (abbasiaSpelling.any((s) => normActual.contains(s)) && 
+          abbasiaSpelling.any((s) => normFilter.contains(s))) {
+        return true;
+      }
+      
+      return false;
+    }
+    
+    return matchPart(bFrom, filterFrom) && matchPart(bTo, filterTo);
+  }
+
   void applyFilters() {
     List<Map<String, dynamic>> temp = _allBuses;
 
@@ -191,8 +227,8 @@ class FleetOperationsViewModel extends ChangeNotifier {
     // Gender filter
     if (_selectedGenderFilter != 'All') {
       temp = temp.where((bus) {
-        final gender = (bus['gender'] ?? '').toString().toLowerCase();
-        return gender == _selectedGenderFilter.toLowerCase();
+        final gender = (bus['gender'] ?? '').toString().toLowerCase().trim();
+        return gender == _selectedGenderFilter.toLowerCase().trim();
       }).toList();
     }
 
@@ -201,16 +237,15 @@ class FleetOperationsViewModel extends ChangeNotifier {
       temp = temp.where((bus) {
         final from = (bus['from'] ?? '').toString();
         final to = (bus['to'] ?? '').toString();
-        final routeLabel = '$from ➔ $to';
-        return routeLabel == _selectedRouteFilter;
+        return _isRouteMatching(from, to, _selectedRouteFilter);
       }).toList();
     }
 
     // Bus number filter
     if (_selectedBusNumberFilter != 'All') {
       temp = temp.where((bus) {
-        final busNum = (bus['busNumber'] ?? '').toString();
-        return busNum == _selectedBusNumberFilter;
+        final busNum = (bus['busNumber'] ?? '').toString().toLowerCase().trim();
+        return busNum == _selectedBusNumberFilter.toLowerCase().trim();
       }).toList();
     }
 
@@ -221,13 +256,32 @@ class FleetOperationsViewModel extends ChangeNotifier {
   // --- Derived Data ---
   List<String> get uniqueRoutes {
     final routes = <String>{};
-    // Use defined schedules (official routes) instead of only active buses
+    // Use defined schedules (official routes)
     for (final schedule in _schedules) {
       if (schedule.from.isNotEmpty && schedule.to.isNotEmpty) {
-        routes.add('${schedule.from} ➔ ${schedule.to}');
+        routes.add('${schedule.from.trim()} ➔ ${schedule.to.trim()}');
       }
     }
-    return ['All', ...routes.toList()];
+    // Add routes from active buses if they don't fuzzy match any schedule route
+    for (final bus in _allBuses) {
+      final busFrom = (bus['from'] ?? '').toString().trim();
+      final busTo = (bus['to'] ?? '').toString().trim();
+      if (busFrom.isNotEmpty && busTo.isNotEmpty) {
+        final busRouteLabel = '$busFrom ➔ $busTo';
+        
+        bool alreadyExists = false;
+        for (final r in routes) {
+          if (_isRouteMatching(busFrom, busTo, r)) {
+            alreadyExists = true;
+            break;
+          }
+        }
+        if (!alreadyExists) {
+          routes.add(busRouteLabel);
+        }
+      }
+    }
+    return ['All', ...routes];
   }
 
   List<String> get uniqueBusNumbers {

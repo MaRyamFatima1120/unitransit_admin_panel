@@ -4,11 +4,14 @@ import 'package:latlong2/latlong.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:unitransit_admin/core/constants/app_colors.dart';
 import 'package:unitransit_admin/core/utils/responsive_util.dart';
 import 'package:unitransit_admin/models/bus_schedule_model.dart';
 import 'package:unitransit_admin/core/utils/animations.dart';
 import 'package:unitransit_admin/view_models/fleet_operations_view_model.dart';
+import 'package:unitransit_admin/view_models/dashboard_view_model.dart';
+
 
 class FleetOperationsScreen extends StatefulWidget {
   const FleetOperationsScreen({super.key});
@@ -695,7 +698,129 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen>
     final speed = (bus['speed'] as num?)?.toDouble() ?? 0.0;
     final plate = bus['plateNumber']?.toString() ?? 'N/A';
     final remainingTime = bus['remainingTime']?.toString() ?? 'N/A';
+    final remainingDistance = bus['remainingDistance']?.toString() ?? 'Calculating...';
     final matchedSchedule = vm.getMatchingSchedule(bus);
+
+    String displayDistance = remainingDistance;
+    String displayTime = remainingTime;
+
+    if ((displayDistance == 'Calculating...' || displayDistance == '---' || displayDistance.isEmpty || displayDistance == 'N/A') ||
+        (displayTime == 'Calculating...' || displayTime == '---' || displayTime.isEmpty || displayTime == 'N/A')) {
+      final lat = (bus['latitude'] as num?)?.toDouble() ?? 0.0;
+      final lng = (bus['longitude'] as num?)?.toDouble() ?? 0.0;
+      if (lat != 0.0 && lng != 0.0) {
+        final busFrom = (bus['from'] ?? '').toString();
+        final busTo = (bus['to'] ?? '').toString();
+
+        List<LatLng>? routePoints;
+        final exactRouteKey = '$busFrom ➔ $busTo';
+        if (vm.polylines.containsKey(exactRouteKey)) {
+          routePoints = vm.polylines[exactRouteKey];
+        } else {
+          // Fuzzy match on keys
+          for (final key in vm.polylines.keys) {
+            final parts = key.split(RegExp(r'(➔|->|to)'));
+            if (parts.length >= 2) {
+              final kFrom = parts[0].trim().toLowerCase();
+              final kTo = parts[1].trim().toLowerCase();
+              final bFrom = busFrom.trim().toLowerCase();
+              final bTo = busTo.trim().toLowerCase();
+
+              bool matchPart(String actual, String filter) {
+                final normActual = actual.replaceAll('campus', '').trim();
+                final normFilter = filter.replaceAll('campus', '').trim();
+                if (normActual == normFilter) return true;
+                final abbasiaSpelling = ['abbasia', 'abasia', 'old'];
+                if (abbasiaSpelling.any((s) => normActual.contains(s)) &&
+                    abbasiaSpelling.any((s) => normFilter.contains(s))) {
+                  return true;
+                }
+                return false;
+              }
+
+              if (matchPart(bFrom, kFrom) && matchPart(bTo, kTo)) {
+                routePoints = vm.polylines[key];
+                break;
+              }
+            }
+          }
+        }
+
+        if (routePoints != null && routePoints.isNotEmpty) {
+          final distanceUtil = const Distance();
+          int minIndex = 0;
+          double minDistance = double.infinity;
+
+          for (int i = 0; i < routePoints.length; i++) {
+            final dist = distanceUtil.as(LengthUnit.Meter, LatLng(lat, lng), routePoints[i]);
+            if (dist < minDistance) {
+              minDistance = dist;
+              minIndex = i;
+            }
+          }
+
+          double totalDistanceMeters = distanceUtil.as(LengthUnit.Meter, LatLng(lat, lng), routePoints[minIndex]);
+          for (int i = minIndex; i < routePoints.length - 1; i++) {
+            totalDistanceMeters += distanceUtil.as(LengthUnit.Meter, routePoints[i], routePoints[i + 1]);
+          }
+
+          final double currentSpeedKmh = speed > 5.0 ? speed : 25.0;
+          final durationSeconds = (totalDistanceMeters / 1000) / currentSpeedKmh * 3600;
+
+          if (displayDistance == 'Calculating...' || displayDistance == '---' || displayDistance.isEmpty || displayDistance == 'N/A') {
+            if (totalDistanceMeters >= 1000) {
+              displayDistance = "${(totalDistanceMeters / 1000).toStringAsFixed(1)} KM";
+            } else {
+              displayDistance = "${totalDistanceMeters.toInt()} M";
+            }
+          }
+          if (displayTime == 'Calculating...' || displayTime == '---' || displayTime.isEmpty || displayTime == 'N/A') {
+            final minutes = (durationSeconds / 60).ceil();
+            if (minutes >= 60) {
+              final hours = minutes ~/ 60;
+              final mins = minutes % 60;
+              displayTime = "${hours}h ${mins}m";
+            } else {
+              displayTime = "$minutes MIN";
+            }
+          }
+        } else {
+          LatLng? destinationCoord;
+          final toLower = busTo.toLowerCase();
+          if (toLower.contains('baghdad')) {
+            destinationCoord = const LatLng(29.378047555871532, 71.75750718286565);
+          } else if (toLower.contains('abbasia') || toLower.contains('abasia') || toLower.contains('old')) {
+            destinationCoord = const LatLng(29.398239582972707, 71.69205655369649);
+          } else if (toLower.contains('railway')) {
+            destinationCoord = const LatLng(29.3970, 71.6850);
+          }
+
+          if (destinationCoord != null) {
+            final distanceMeters = const Distance().as(LengthUnit.Meter, LatLng(lat, lng), destinationCoord);
+            final adjustedDistance = distanceMeters * 1.3;
+            final durationSeconds = (adjustedDistance / 1000) / 25.0 * 3600;
+
+            if (displayDistance == 'Calculating...' || displayDistance == '---' || displayDistance.isEmpty || displayDistance == 'N/A') {
+              if (adjustedDistance >= 1000) {
+                displayDistance = "${(adjustedDistance / 1000).toStringAsFixed(1)} KM";
+              } else {
+                displayDistance = "${adjustedDistance.toInt()} M";
+              }
+            }
+            if (displayTime == 'Calculating...' || displayTime == '---' || displayTime.isEmpty || displayTime == 'N/A') {
+              final minutes = (durationSeconds / 60).ceil();
+              if (minutes >= 60) {
+                final hours = minutes ~/ 60;
+                final mins = minutes % 60;
+                displayTime = "${hours}h ${mins}m";
+              } else {
+                displayTime = "$minutes MIN";
+              }
+            }
+          }
+        }
+      }
+    }
 
     return Card(
       elevation: 6,
@@ -768,15 +893,15 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen>
                   ),
                   Container(width: 1, height: 28, color: AppColors.borderLight),
                   _buildCardMiniStat(
-                    Icons.route_outlined,
-                    'Gender',
-                    bus['gender'] ?? 'Combined',
+                    Icons.straighten_rounded,
+                    'Distance',
+                    displayDistance,
                   ),
                   Container(width: 1, height: 28, color: AppColors.borderLight),
                   _buildCardMiniStat(
                     Icons.timer_outlined,
                     'ETA',
-                    remainingTime,
+                    displayTime,
                   ),
                 ],
               ),
@@ -892,7 +1017,234 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen>
                   ],
                 ),
               ),
+            _buildDriverInfoSection(bus),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDriverInfoSection(Map<String, dynamic> bus) {
+    final driverId = bus['driverId']?.toString() ?? '';
+    if (driverId.isEmpty) {
+      return _buildDriverInfoRow(
+        name: bus['driverName'] ?? 'No Name',
+        phone: 'N/A',
+        email: 'N/A',
+        experience: 'N/A',
+        profileUrl: null,
+        isVerified: false,
+      );
+    }
+
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance.collection('drivers').doc(driverId).snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8.0),
+            child: Center(
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          );
+        }
+        if (!snapshot.hasData || !snapshot.data!.exists) {
+          return _buildDriverInfoRow(
+            name: bus['driverName'] ?? 'No Name',
+            phone: 'N/A',
+            email: 'N/A',
+            experience: 'N/A',
+            profileUrl: null,
+            isVerified: false,
+          );
+        }
+
+        final driverData = snapshot.data!.data() ?? {};
+        final name = driverData['name']?.toString() ?? bus['driverName'] ?? 'No Name';
+        final phone = driverData['phoneNumber']?.toString() ?? 'N/A';
+        final email = driverData['email']?.toString() ?? 'N/A';
+        final experience = driverData['experience']?.toString() ?? 'N/A';
+        final profileUrl = driverData['profileUrl']?.toString();
+        final isVerified = driverData['isVerified'] as bool? ?? false;
+
+        return _buildDriverInfoRow(
+          name: name,
+          phone: phone,
+          email: email,
+          experience: experience,
+          profileUrl: profileUrl,
+          isVerified: isVerified,
+        );
+      },
+    );
+  }
+
+  Widget _buildDriverInfoRow({
+    required String name,
+    required String phone,
+    required String email,
+    required String experience,
+    required String? profileUrl,
+    required bool isVerified,
+  }) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: InkWell(
+        onTap: () {
+          try {
+            context.read<DashboardViewModel>().setSelectedIndex(2); // Drivers Screen
+          } catch (e) {
+            debugPrint("Navigation error: $e");
+          }
+        },
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          margin: const EdgeInsets.only(top: 12),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: AppColors.backgroundLight,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.borderLight),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        'ASSIGNED DRIVER DETAILS',
+                        style: GoogleFonts.poppins(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textSecondary,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Icon(
+                        Icons.open_in_new_rounded,
+                        size: 11,
+                        color: AppColors.primaryNavy.withValues(alpha: 0.6),
+                      ),
+                    ],
+                  ),
+                  if (isVerified)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.verified_rounded, color: Colors.blue, size: 10),
+                          const SizedBox(width: 2),
+                          Text(
+                            'VERIFIED',
+                            style: GoogleFonts.poppins(
+                              fontSize: 8,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.blue,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  CircleAvatar(
+                    radius: 22,
+                    backgroundColor: AppColors.primaryNavy.withValues(alpha: 0.1),
+                    backgroundImage: profileUrl != null && profileUrl.isNotEmpty
+                        ? NetworkImage(profileUrl)
+                        : null,
+                    child: profileUrl == null || profileUrl.isEmpty
+                        ? Icon(Icons.person, color: AppColors.primaryNavy, size: 24)
+                        : null,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          name,
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                            color: AppColors.textDark,
+                          ),
+                        ),
+                        Text(
+                          'Experience: $experience',
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            color: AppColors.textSecondary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              const Divider(height: 1, thickness: 0.5),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Icon(Icons.phone_rounded, size: 14, color: AppColors.primaryNavy),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            phone,
+                            style: GoogleFonts.poppins(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textDark,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Icon(Icons.email_rounded, size: 14, color: AppColors.primaryNavy),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            email,
+                            style: GoogleFonts.poppins(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textDark,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
