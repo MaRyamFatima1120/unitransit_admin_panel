@@ -640,7 +640,30 @@ class PolylineUploaderSection extends StatelessWidget {
             width: double.infinity,
             height: 50,
             child: ElevatedButton.icon(
-              onPressed: viewModel.isPolylineSaving ? null : () => viewModel.uploadPolyline(),
+              onPressed: viewModel.isPolylineSaving
+                  ? null
+                  : () async {
+                      try {
+                        await viewModel.uploadPolyline();
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Path synchronized successfully!'),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Failed to sync path: ${e.toString().replaceAll("Exception: ", "")}'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      }
+                    },
               icon: const Icon(Icons.sync_rounded),
               label: const Text('Sync Path', style: TextStyle(fontWeight: FontWeight.bold)),
               style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryNavy, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
