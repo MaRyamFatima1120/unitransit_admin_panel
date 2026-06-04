@@ -10,6 +10,18 @@ import 'package:unitransit_admin/core/utils/animations.dart';
 class TripHistoryScreen extends StatefulWidget {
   const TripHistoryScreen({super.key});
 
+  static int? parseTimestamp(dynamic val, [String? tripId]) {
+    if (val is int) return val;
+    if (val is num) return val.toInt();
+    if (val is String) {
+      return int.tryParse(val);
+    }
+    if (tripId != null) {
+      return int.tryParse(tripId);
+    }
+    return null;
+  }
+
   @override
   State<TripHistoryScreen> createState() => _TripHistoryScreenState();
 }
@@ -119,9 +131,9 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
                                     // Date Filter
                                     if (selectedDate != null) {
                                       filteredTrips = filteredTrips.where((t) {
-                                        final startTimeVal = t['startTime'];
-                                        if (startTimeVal == null) return false;
-                                        final date = DateTime.fromMillisecondsSinceEpoch(startTimeVal);
+                                        final parsedTime = TripHistoryScreen.parseTimestamp(t['startTime'], t['tripId']);
+                                        if (parsedTime == null) return false;
+                                        final date = DateTime.fromMillisecondsSinceEpoch(parsedTime);
                                         return date.year == selectedDate.year &&
                                             date.month == selectedDate.month &&
                                             date.day == selectedDate.day;
@@ -647,7 +659,8 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
     String? lastHeader;
     for (var trip in trips) {
       final startTimeVal = trip['startTime'];
-      final header = startTimeVal != null ? _getGroupDateHeader(startTimeVal) : 'Unknown Date';
+      final parsedTime = TripHistoryScreen.parseTimestamp(startTimeVal, trip['tripId']);
+      final header = parsedTime != null ? _getGroupDateHeader(parsedTime) : 'Unknown Date';
       if (header != lastHeader) {
         listItems.add(TripListItem.header(header));
         lastHeader = header;
@@ -782,12 +795,15 @@ class _TripRowState extends State<_TripRow> {
     final startTimeVal = trip['startTime'];
     final endTimeVal = trip['endTime'];
 
-    final String startTimeText = startTimeVal != null
-        ? DateFormat('dd MMM, hh:mm a').format(DateTime.fromMillisecondsSinceEpoch(startTimeVal))
+    final parsedStartTime = TripHistoryScreen.parseTimestamp(startTimeVal, trip['tripId']);
+    final parsedEndTime = TripHistoryScreen.parseTimestamp(endTimeVal);
+
+    final String startTimeText = parsedStartTime != null
+        ? DateFormat('dd MMM, hh:mm a').format(DateTime.fromMillisecondsSinceEpoch(parsedStartTime))
         : 'N/A';
 
-    final String endTimeText = status == 'completed' && endTimeVal != null
-        ? DateFormat('dd MMM, hh:mm a').format(DateTime.fromMillisecondsSinceEpoch(endTimeVal))
+    final String endTimeText = status == 'completed' && parsedEndTime != null
+        ? DateFormat('dd MMM, hh:mm a').format(DateTime.fromMillisecondsSinceEpoch(parsedEndTime))
         : (status == 'active' ? 'Active Now' : 'N/A');
 
     return MouseRegion(

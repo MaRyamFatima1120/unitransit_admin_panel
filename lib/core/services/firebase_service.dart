@@ -393,6 +393,7 @@ class FirebaseService {
     StreamSubscription? driverSub;
     StreamSubscription? studentSub;
     StreamSubscription? tripsSub;
+    StreamSubscription? busesSub;
 
     int drivers = 0;
     int students = 0;
@@ -426,11 +427,21 @@ class FirebaseService {
               updateStats();
             });
 
+        // Truly Real-time Active Trips count from RTDB buses node
+        busesSub = _rtdb.ref('buses').onValue.listen((event) {
+          final data = event.snapshot.value;
+          if (data is Map) {
+            activeTripsCount = data.length;
+          } else {
+            activeTripsCount = 0;
+          }
+          updateStats();
+        });
+
         tripsSub = _db.collection('completed_trips').snapshots().listen((
           snap,
         ) async {
           double tempRevenue = 0.0;
-          int tempActive = 0;
           for (var doc in snap.docs) {
             final data = doc.data();
             final amount =
@@ -441,36 +452,9 @@ class FirebaseService {
                 data['price'] ??
                 0;
             tempRevenue += (amount is num ? amount.toDouble() : 0.0);
-
-            final status = data['status']?.toString().toLowerCase();
-            if (status == 'active' ||
-                status == 'in_progress' ||
-                status == 'ongoing' ||
-                data['isActive'] == true) {
-              tempActive++;
-            }
-          }
-
-          if (tempActive == 0) {
-            try {
-              final activeTripsSnapshot =
-                  await _db.collection('active_trips').get();
-              tempActive += activeTripsSnapshot.docs.length;
-            } catch (_) {}
-            if (tempActive == 0) {
-              try {
-                final tripsSnapshot =
-                    await _db
-                        .collection('trips')
-                        .where('status', isEqualTo: 'active')
-                        .get();
-                tempActive += tripsSnapshot.docs.length;
-              } catch (_) {}
-            }
           }
 
           revenue = tempRevenue;
-          activeTripsCount = tempActive;
           updateStats();
         });
       },
@@ -478,6 +462,7 @@ class FirebaseService {
         driverSub?.cancel();
         studentSub?.cancel();
         tripsSub?.cancel();
+        busesSub?.cancel();
       },
     );
 

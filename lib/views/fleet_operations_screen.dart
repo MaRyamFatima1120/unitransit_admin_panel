@@ -11,6 +11,7 @@ import 'package:unitransit_admin/models/bus_schedule_model.dart';
 import 'package:unitransit_admin/core/utils/animations.dart';
 import 'package:unitransit_admin/view_models/fleet_operations_view_model.dart';
 import 'package:unitransit_admin/view_models/dashboard_view_model.dart';
+import 'package:unitransit_admin/view_models/login_view_model.dart';
 
 
 class FleetOperationsScreen extends StatefulWidget {
@@ -109,8 +110,14 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen>
 
   @override
   Widget build(BuildContext context) {
-    final isMobile = AppResponsiveUtil.isMobile(context);
+    final loginVM = context.read<LoginViewModel>();
     final vm = context.watch<FleetOperationsViewModel>();
+    
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      vm.setSuperAdmin(loginVM.isSuperAdmin);
+    });
+
+    final isMobile = AppResponsiveUtil.isMobile(context);
     final selectedBus = vm.selectedBus;
 
     return Scaffold(
@@ -889,19 +896,19 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen>
                   _buildCardMiniStat(
                     Icons.speed,
                     'Speed',
-                    '${speed.toStringAsFixed(0)} km/h',
+                    bus['status'] == 'force_stopped' ? '0 km/h' : '${speed.toStringAsFixed(0)} km/h',
                   ),
                   Container(width: 1, height: 28, color: AppColors.borderLight),
                   _buildCardMiniStat(
                     Icons.straighten_rounded,
                     'Distance',
-                    displayDistance,
+                    bus['status'] == 'force_stopped' ? 'Stopped' : displayDistance,
                   ),
                   Container(width: 1, height: 28, color: AppColors.borderLight),
                   _buildCardMiniStat(
                     Icons.timer_outlined,
                     'ETA',
-                    displayTime,
+                    bus['status'] == 'force_stopped' ? 'Stopped' : displayTime,
                   ),
                 ],
               ),
@@ -1017,10 +1024,201 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen>
                   ],
                 ),
               ),
-            _buildDriverInfoSection(bus),
+             _buildDriverInfoSection(bus),
+            if (bus['status'] == 'force_stopped') ...[
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.power_settings_new_rounded,
+                      size: 16,
+                      color: Colors.red.shade700,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Tracking Status',
+                            style: GoogleFonts.poppins(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.red.shade700,
+                            ),
+                          ),
+                          Text(
+                            'Live tracking terminated by Super Admin',
+                            style: GoogleFonts.poppins(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.red.shade900,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ] else if (context.read<LoginViewModel>().isSuperAdmin) ...[
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: () => _showForceStopConfirmation(context, bus, vm),
+                icon: const Icon(Icons.power_settings_new_rounded, size: 16),
+                label: Text(
+                  'FORCE STOP TRACKING',
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 11,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red.shade600,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
+    );
+  }
+
+  void _showForceStopConfirmation(
+    BuildContext context,
+    Map<String, dynamic> bus,
+    FleetOperationsViewModel vm,
+  ) {
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.warning_amber_rounded,
+                  color: Colors.red.shade600,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Force Stop Tracking?',
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  color: AppColors.textDark,
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            'Are you sure you want to force stop tracking for Bus #${bus['busNumber'] ?? 'N/A'}?\n\nThis will remove the live bus from the tracking system and terminate the current trip run.',
+            style: GoogleFonts.poppins(
+              fontSize: 13,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          actionsPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(
+                'CANCEL',
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(dialogContext);
+                
+                // Show loading indicator
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Row(
+                      children: [
+                        const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          'Stopping tracking for Bus #${bus['busNumber']}...',
+                          style: GoogleFonts.poppins(fontSize: 12),
+                        ),
+                      ],
+                    ),
+                    backgroundColor: AppColors.primaryNavy,
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+
+                await vm.forceStopTracking(bus);
+
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'Bus #${bus['busNumber']} has been stopped successfully.',
+                        style: GoogleFonts.poppins(fontSize: 12),
+                      ),
+                      backgroundColor: Colors.green.shade600,
+                      duration: const Duration(seconds: 3),
+                    ),
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red.shade600,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: Text(
+                'FORCE STOP',
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -1309,7 +1507,9 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen>
   }
 
   List<Marker> _buildMapMarkers(FleetOperationsViewModel vm) {
-    return vm.filteredBuses.map((bus) {
+    return vm.filteredBuses
+        .where((bus) => bus['status'] != 'force_stopped')
+        .map((bus) {
       final lat = (bus['latitude'] as num?)?.toDouble() ?? 0.0;
       final lng = (bus['longitude'] as num?)?.toDouble() ?? 0.0;
       final isSelected = vm.selectedBusId == bus['id'];
@@ -1323,8 +1523,8 @@ class _FleetOperationsScreenState extends State<FleetOperationsScreen>
 
       return Marker(
         point: LatLng(lat, lng),
-        width: 80,
-        height: 80,
+        width: 100,
+        height: 100,
         child: GestureDetector(
           onTap: () {
             vm.selectBus(bus['id']);
@@ -1678,18 +1878,26 @@ class _BusListItemState extends State<_BusListItem> {
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color:
-                widget.isSelected || _isHovered
+            color: widget.bus['status'] == 'force_stopped'
+                ? (widget.isSelected || _isHovered
+                    ? Colors.red.withValues(alpha: 0.08)
+                    : Colors.red.withValues(alpha: 0.03))
+                : (widget.isSelected || _isHovered
                     ? AppColors.primaryNavy.withValues(alpha: 0.04)
-                    : Colors.white,
+                    : Colors.white),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color:
-                  widget.isSelected
+              color: widget.bus['status'] == 'force_stopped'
+                  ? (widget.isSelected
+                      ? Colors.red
+                      : (_isHovered
+                          ? Colors.red.withValues(alpha: 0.5)
+                          : Colors.red.withValues(alpha: 0.2)))
+                  : (widget.isSelected
                       ? AppColors.primaryNavy
                       : (_isHovered
                           ? AppColors.primaryNavy.withValues(alpha: 0.3)
-                          : AppColors.borderLight),
+                          : AppColors.borderLight)),
               width: widget.isSelected ? 1.5 : 1.0,
             ),
             boxShadow:
@@ -1714,12 +1922,16 @@ class _BusListItemState extends State<_BusListItem> {
                     child: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: AppColors.primaryNavy.withValues(alpha: 0.08),
+                        color: widget.bus['status'] == 'force_stopped'
+                            ? Colors.red.withValues(alpha: 0.08)
+                            : AppColors.primaryNavy.withValues(alpha: 0.08),
                         shape: BoxShape.circle,
                       ),
                       child: Icon(
                         Icons.directions_bus_filled,
-                        color: AppColors.primaryNavy,
+                        color: widget.bus['status'] == 'force_stopped'
+                            ? Colors.red
+                            : AppColors.primaryNavy,
                         size: 20,
                       ),
                     ),
@@ -1776,8 +1988,10 @@ class _BusListItemState extends State<_BusListItem> {
                   Container(
                     width: 8,
                     height: 8,
-                    decoration: const BoxDecoration(
-                      color: Colors.green,
+                    decoration: BoxDecoration(
+                      color: widget.bus['status'] == 'force_stopped'
+                          ? Colors.red
+                          : Colors.green,
                       shape: BoxShape.circle,
                     ),
                   ),
@@ -1813,14 +2027,30 @@ class _BusListItemState extends State<_BusListItem> {
                       ],
                     ),
                   ),
-                  Text(
-                    '${widget.speed.toStringAsFixed(0)} km/h',
-                    style: GoogleFonts.poppins(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.primaryNavy,
-                    ),
-                  ),
+                  widget.bus['status'] == 'force_stopped'
+                      ? Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            'STOPPED',
+                            style: GoogleFonts.poppins(
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.red.shade700,
+                            ),
+                          ),
+                        )
+                      : Text(
+                          '${widget.speed.toStringAsFixed(0)} km/h',
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.primaryNavy,
+                          ),
+                        ),
                 ],
               ),
               const SizedBox(height: 8),
