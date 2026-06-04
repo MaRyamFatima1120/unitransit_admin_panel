@@ -574,7 +574,7 @@ class PolylineUploaderSection extends StatelessWidget {
         children: [
           SizedBox(
             width: isDesktop ? 380 : double.infinity,
-            child: _buildPolylineForm(viewModel, firebaseService),
+            child: _buildPolylineForm(context, viewModel, firebaseService),
           ),
           if (isDesktop) const SizedBox(width: 24),
           if (!isDesktop) const SizedBox(height: 24),
@@ -587,7 +587,7 @@ class PolylineUploaderSection extends StatelessWidget {
     );
   }
 
-  Widget _buildPolylineForm(RoutePlanningViewModel viewModel, FirebaseService firebaseService) {
+  Widget _buildPolylineForm(BuildContext context, RoutePlanningViewModel viewModel, FirebaseService firebaseService) {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
